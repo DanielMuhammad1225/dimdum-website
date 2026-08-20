@@ -39,3 +39,9 @@ Thumbs.db
 
 # Database lokal SQLite warisan setup awal.
 /database/database.sqlite
+
+# Aset vendor Filament (dipublikasikan ulang otomatis oleh
+# `php artisan filament:upgrade` lewat composer post-autoload-dump).
+/public/css/filament/
+/public/js/filament/
+/public/fonts/filament/
