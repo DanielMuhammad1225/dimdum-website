@@ -1,0 +1,95 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+
+/*
+|--------------------------------------------------------------------------
+| Design tokens DIMDUM
+|--------------------------------------------------------------------------
+| Semua warna, font, radius, dan shadow brand didefinisikan di sini supaya
+| Blade tidak pernah menuliskan kode warna mentah.
+*/
+@theme {
+    /* Palet brand */
+    --color-brand-orange: #f47a32;
+    --color-brand-cream: #fff1d6;
+    --color-brand-brown: #38251e;
+    --color-brand-yellow: #ffc84a;
+    --color-brand-cream-soft: #fff9ed;
+
+    /* Tipografi */
+    --font-sans: 'Poppins', system-ui, sans-serif;
+    --font-display: 'Fredoka', ui-rounded, system-ui, sans-serif;
+
+    /* Sudut rounded khas brand */
+    --radius-card: 1.5rem;
+    --radius-pill: 999px;
+
+    /* Shadow ringan bergaya stiker, bukan shadow berat */
+    --shadow-sticker: 0 3px 0 0 rgba(56, 37, 30, 0.08);
+    --shadow-sticker-lg: 0 6px 0 0 rgba(56, 37, 30, 0.1);
+
+    /* Tinggi header sticky, dipakai juga sebagai offset anchor */
+    --spacing-header: 4rem;
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        /* Anchor tidak tertutup sticky header */
+        scroll-padding-top: calc(var(--spacing-header) + 1rem);
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        background-color: var(--color-brand-cream-soft);
+        color: var(--color-brand-brown);
+        font-family: var(--font-sans);
+    }
+
+    h1,
+    h2,
+    h3 {
+        font-family: var(--font-display);
+        letter-spacing: -0.01em;
+    }
+
+    :focus-visible {
+        outline: 3px solid var(--color-brand-brown);
+        outline-offset: 3px;
+        border-radius: 6px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+        }
+    }
+}
+
+/*
+| Animasi ringan untuk elemen dekoratif hero.
+*/
+@keyframes brand-float {
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-6px);
+    }
+}
+
+@utility animate-brand-float {
+    animation: brand-float 6s ease-in-out infinite;
+}

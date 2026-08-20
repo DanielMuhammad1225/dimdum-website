@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QA interact</title>
+<style>
+  html, body { margin: 0; background: #fff; }
+  #f { border: 0; display: block; width: 360px; height: 800px; }
+  #qa-report { font: 12px/1.45 monospace; white-space: pre; padding: 6px; }
+</style>
+</head>
+<body>
+<iframe id="f" src="/"></iframe>
+<script>
+var f = document.getElementById('f');
+var p = new URLSearchParams(location.search);
+f.style.width = (p.get('w') || '360') + 'px';
+
+function report(lines) {
+  var pre = document.createElement('pre');
+  pre.id = 'qa-report';
+  pre.textContent = lines.join('\n');
+  document.body.appendChild(pre);
+}
+
+f.addEventListener('load', function () {
+  setTimeout(function () {
+    var d = f.contentDocument, w = f.contentWindow, L = [];
+    var btn = d.getElementById('menu-toggle');
+    var menu = d.getElementById('menu-mobile');
+
+    L.push('--- MOBILE MENU ---');
+    if (!btn || !menu) { L.push('FAIL: toggle/menu not found'); report(L); return; }
+
+    var btnBox = btn.getBoundingClientRect();
+    L.push('button size=' + Math.round(btnBox.width) + 'x' + Math.round(btnBox.height));
+    L.push('button visible=' + (w.getComputedStyle(btn).display !== 'none'));
+    L.push('accessible name="' + (btn.textContent || '').trim() + '"');
+    L.push('aria-controls=' + btn.getAttribute('aria-controls'));
+    L.push('initial aria-expanded=' + btn.getAttribute('aria-expanded'));
+    L.push('initial menu display=' + w.getComputedStyle(menu).display);
+
+    // Open via click.
+    btn.click();
+    L.push('after click aria-expanded=' + btn.getAttribute('aria-expanded'));
+    L.push('after click menu display=' + w.getComputedStyle(menu).display);
+    var links = menu.querySelectorAll('a');
+    L.push('menu links=' + links.length);
+    var minH = 999;
+    for (var i = 0; i < links.length; i++) {
+      minH = Math.min(minH, Math.round(links[i].getBoundingClientRect().height));
+    }
+    L.push('smallest menu link height=' + minH);
+    L.push('accessible name when open="' + (btn.textContent || '').trim() + '"');
+
+    // Keyboard: Escape must close and return focus.
+    d.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    L.push('after Escape aria-expanded=' + btn.getAttribute('aria-expanded'));
+    L.push('after Escape menu display=' + w.getComputedStyle(menu).display);
+    L.push('focus returned to toggle=' + (d.activeElement === btn));
+
+    // Reopen, then click a link -> should close.
+    btn.click();
+    var first = menu.querySelector('a');
+    first.dispatchEvent(new w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    L.push('after link click aria-expanded=' + btn.getAttribute('aria-expanded'));
+
+    L.push('');
+    L.push('--- FOCUS VISIBILITY ---');
+    var probe = d.querySelector('header a, header button');
+    probe.focus();
+    var st = w.getComputedStyle(probe, null);
+    L.push('focus outline-width=' + st.outlineWidth + ' style=' + st.outlineStyle + ' color=' + st.outlineColor);
+
+    L.push('');
+    L.push('--- ANCHOR OFFSET vs STICKY HEADER ---');
+    var hdr = d.querySelector('header');
+    var hdrH = Math.round(hdr.getBoundingClientRect().height);
+    L.push('header height=' + hdrH);
+    L.push('scroll-padding-top=' + w.getComputedStyle(d.documentElement).scrollPaddingTop);
+    ['pilihan-dimsum', 'cara-jajan', 'lokasi'].forEach(function (id) {
+      var el = d.getElementById(id);
+      el.scrollIntoView();
+      var top = Math.round(el.getBoundingClientRect().top);
+      var heading = el.querySelector('h2');
+      var hTop = heading ? Math.round(heading.getBoundingClientRect().top) : null;
+      L.push('#' + id + ' section top=' + top + ' (header ends at ' + hdrH + ') heading top=' + hTop +
+             ' -> ' + (hTop !== null && hTop >= hdrH ? 'OK visible' : 'HIDDEN behind header'));
+    });
+    w.scrollTo(0, 0);
+
+    L.push('');
+    L.push('--- TAP TARGETS < 44px ---');
+    var act = d.querySelectorAll('a, button'), small = [];
+    for (var k = 0; k < act.length; k++) {
+      var r = act[k].getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      if (w.getComputedStyle(act[k]).display === 'none') continue;
+      if (r.height < 44) small.push(Math.round(r.width) + 'x' + Math.round(r.height) + ' "' + (act[k].textContent || '').trim().slice(0, 30) + '"');
+    }
+    L.push('count=' + small.length);
+    L = L.concat(small.map(function (x) { return '  ' + x; }));
+
+    L.push('');
+    L.push('--- OVERFLOW (no clip) ---');
+    L.push('viewport=' + d.documentElement.clientWidth + ' scrollWidth=' + d.documentElement.scrollWidth);
+    L.push('body overflow-x computed=' + w.getComputedStyle(d.body).overflowX);
+    L.push('NO_H_OVERFLOW=' + (d.documentElement.scrollWidth <= d.documentElement.clientWidth));
+
+    report(L);
+  }, 700);
+});
+</script>
+</body>
+</html>

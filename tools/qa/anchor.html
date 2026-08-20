@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QA anchor</title>
+<style>
+  html, body { margin: 0; background: #fff; }
+  #f { border: 0; display: block; width: 360px; height: 800px; }
+  #qa-report { font: 12px/1.45 monospace; white-space: pre; padding: 6px; }
+</style>
+</head>
+<body>
+<iframe id="f" src="/"></iframe>
+<script>
+var f = document.getElementById('f');
+var p = new URLSearchParams(location.search);
+f.style.width = (p.get('w') || '360') + 'px';
+
+f.addEventListener('load', function () {
+  setTimeout(function () {
+    var d = f.contentDocument, w = f.contentWindow, L = [];
+
+    L.push('--- REDUCED MOTION ---');
+    L.push('matchMedia(prefers-reduced-motion: reduce)=' + w.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    L.push('html scroll-behavior=' + w.getComputedStyle(d.documentElement).scrollBehavior);
+    var floaty = d.querySelector('.animate-brand-float');
+    if (floaty) {
+      var fs = w.getComputedStyle(floaty);
+      L.push('hero float animation-duration=' + fs.animationDuration + ' iterations=' + fs.animationIterationCount);
+    } else {
+      L.push('hero float element not found');
+    }
+    var btnEl = d.querySelector('a[href="#pilihan-dimsum"]');
+    L.push('cta transition-duration=' + w.getComputedStyle(btnEl).transitionDuration);
+
+    L.push('');
+    L.push('--- ANCHOR LANDING (instant scroll) ---');
+    var hdrH = Math.round(d.querySelector('header').getBoundingClientRect().height);
+    L.push('sticky header height=' + hdrH);
+    // Disable smooth scrolling so measurements are synchronous.
+    d.documentElement.style.scrollBehavior = 'auto';
+
+    ['pilihan-dimsum', 'cara-jajan', 'lokasi'].forEach(function (id) {
+      w.scrollTo(0, 0);
+      var el = d.getElementById(id);
+      el.scrollIntoView();
+      var secTop = Math.round(el.getBoundingClientRect().top);
+      var h2 = el.querySelector('h2');
+      var hTop = Math.round(h2.getBoundingClientRect().top);
+      var clear = hTop - hdrH;
+      L.push('#' + id + ': scrollY=' + Math.round(w.scrollY) +
+             ' sectionTop=' + secTop + ' headingTop=' + hTop +
+             ' clearance=' + clear + 'px -> ' + (clear >= 0 ? 'OK' : 'HIDDEN behind header'));
+    });
+    w.scrollTo(0, 0);
+
+    var pre = document.createElement('pre');
+    pre.id = 'qa-report';
+    pre.textContent = L.join('\n');
+    document.body.appendChild(pre);
+  }, 700);
+});
+</script>
+</body>
+</html>

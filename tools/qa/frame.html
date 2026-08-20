@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QA frame</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #fff; }
+  #f { border: 0; display: block; }
+  #qa-report { font: 12px/1.4 monospace; white-space: pre; background: #fff; margin: 0; padding: 4px; }
+</style>
+</head>
+<body>
+<iframe id="f" src="/"></iframe>
+<script>
+  var p = new URLSearchParams(location.search);
+  var W = parseInt(p.get('w') || '360', 10);
+  var H = parseInt(p.get('h') || '900', 10);
+  var full = p.get('full') === '1';
+  var f = document.getElementById('f');
+  f.style.width = W + 'px';
+  f.style.height = H + 'px';
+
+  f.addEventListener('load', function () {
+    setTimeout(function () {
+      var d = f.contentDocument;
+      var win = f.contentWindow;
+
+      if (full) {
+        // Grow the frame to the full document height so one screenshot
+        // captures the entire page at this viewport width.
+        f.style.height = d.documentElement.scrollHeight + 'px';
+      }
+
+      var vw = d.documentElement.clientWidth;
+      var lines = [
+        'VIEWPORT=' + vw,
+        'DOC_SCROLLWIDTH=' + d.documentElement.scrollWidth,
+        'BODY_SCROLLWIDTH=' + d.body.scrollWidth,
+        'DOC_HEIGHT=' + d.documentElement.scrollHeight,
+        'NO_H_OVERFLOW=' + (d.documentElement.scrollWidth <= vw)
+      ];
+
+      // What would overflow if overflow-x:hidden were not there?
+      d.body.style.overflowX = 'visible';
+      var all = d.querySelectorAll('*'), off = [];
+      for (var i = 0; i < all.length; i++) {
+        var el = all[i], r = el.getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        if (r.right > vw + 1) {
+          var s = el.tagName.toLowerCase();
+          if (el.className && typeof el.className === 'string') {
+            s += '.' + el.className.trim().split(/\s+/).slice(0, 5).join('.');
+          }
+          off.push(Math.round(r.left) + '..' + Math.round(r.right) + ' | ' + s);
+        }
+      }
+      lines.push('RAW_SCROLLWIDTH_NO_CLIP=' + d.documentElement.scrollWidth);
+      lines.push('OFFENDERS=' + off.length);
+      lines = lines.concat(off.slice(0, 25));
+      d.body.style.overflowX = '';
+
+      // Accessibility / structure probes.
+      lines.push('H1_COUNT=' + d.querySelectorAll('h1').length);
+      lines.push('IMG_COUNT=' + d.querySelectorAll('img').length);
+      lines.push('IMG_NO_ALT=' + d.querySelectorAll('img:not([alt])').length);
+      var imgs = d.querySelectorAll('img'), broken = [];
+      for (var j = 0; j < imgs.length; j++) {
+        if (!imgs[j].complete || imgs[j].naturalWidth === 0) broken.push(imgs[j].currentSrc || imgs[j].src);
+      }
+      lines.push('IMG_BROKEN=' + broken.length + (broken.length ? ' -> ' + broken.join(', ') : ''));
+      for (var k = 0; k < imgs.length; k++) {
+        var im = imgs[k];
+        lines.push('  img rendered=' + Math.round(im.getBoundingClientRect().width) + 'x' + Math.round(im.getBoundingClientRect().height) +
+                   ' natural=' + im.naturalWidth + 'x' + im.naturalHeight +
+                   ' src=' + (im.currentSrc || im.src).split('/').pop());
+      }
+
+      // Tap-target audit for interactive elements.
+      var small = [];
+      var act = d.querySelectorAll('a, button');
+      for (var m = 0; m < act.length; m++) {
+        var ar = act[m].getBoundingClientRect();
+        if (ar.width === 0 && ar.height === 0) continue;
+        if (ar.height < 44) {
+          small.push(Math.round(ar.width) + 'x' + Math.round(ar.height) + ' "' + (act[m].textContent || '').trim().slice(0, 28) + '"');
+        }
+      }
+      lines.push('TAP_TARGETS_UNDER_44PX=' + small.length);
+      lines = lines.concat(small.slice(0, 20).map(function (x) { return '  ' + x; }));
+
+      // Sticky header vs anchor targets.
+      var hdr = d.querySelector('header');
+      lines.push('HEADER_HEIGHT=' + (hdr ? Math.round(hdr.getBoundingClientRect().height) : 'n/a'));
+
+      var pre = document.createElement('pre');
+      pre.id = 'qa-report';
+      pre.textContent = lines.join('\n');
+      document.body.appendChild(pre);
+    }, 600);
+  });
+</script>
+</body>
+</html>

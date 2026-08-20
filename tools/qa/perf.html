@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QA perf</title>
+<style>
+  html, body { margin: 0; background: #fff; }
+  #f { border: 0; display: block; width: 1440px; height: 900px; }
+  #qa-report { font: 12px/1.45 monospace; white-space: pre; padding: 6px; }
+</style>
+</head>
+<body>
+<iframe id="f" src="/"></iframe>
+<script>
+var p = new URLSearchParams(location.search);
+var f = document.getElementById('f');
+f.style.width = (p.get('w') || '1440') + 'px';
+
+f.addEventListener('load', function () {
+  setTimeout(function () {
+    var d = f.contentDocument, w = f.contentWindow, L = [];
+    var res = w.performance.getEntriesByType('resource');
+    var total = 0, n = 0;
+    var rows = [];
+
+    res.forEach(function (r) {
+      var size = r.transferSize || r.encodedBodySize || 0;
+      total += size;
+      n++;
+      rows.push({ size: size, name: r.name.split('/').pop().split('?')[0], type: r.initiatorType });
+    });
+
+    rows.sort(function (a, b) { return b.size - a.size; });
+
+    var nav = w.performance.getEntriesByType('navigation')[0];
+    var htmlSize = nav ? (nav.transferSize || nav.encodedBodySize || 0) : 0;
+
+    L.push('=== REQUESTS (subresources) ===');
+    rows.forEach(function (r) {
+      L.push('  ' + String(Math.round(r.size / 102.4) / 10).padStart(8) + ' KB  ' + r.type.padEnd(10) + ' ' + r.name);
+    });
+    L.push('');
+    L.push('HTML document        = ' + Math.round(htmlSize / 102.4) / 10 + ' KB');
+    L.push('Subresource count    = ' + n);
+    L.push('Subresource bytes    = ' + Math.round(total / 102.4) / 10 + ' KB');
+    L.push('TOTAL PAGE WEIGHT    = ' + Math.round((total + htmlSize) / 102.4) / 10 + ' KB');
+
+    L.push('');
+    L.push('=== FONT FILES ACTUALLY FETCHED ===');
+    var fonts = rows.filter(function (r) { return /\.(woff2?|ttf)$/.test(r.name); });
+    fonts.forEach(function (r) { L.push('  ' + r.name + '  ' + Math.round(r.size / 102.4) / 10 + ' KB'); });
+    L.push('  count=' + fonts.length);
+
+    L.push('');
+    L.push('=== IMAGE FORMAT CHOSEN ===');
+    var imgs = d.querySelectorAll('img');
+    for (var i = 0; i < imgs.length; i++) {
+      L.push('  ' + (imgs[i].currentSrc || imgs[i].src).split('/').pop() +
+             '  loading=' + (imgs[i].getAttribute('loading') || '-') +
+             '  fetchpriority=' + (imgs[i].getAttribute('fetchpriority') || '-'));
+    }
+
+    L.push('');
+    L.push('=== LCP / PAINT ===');
+    var fcp = w.performance.getEntriesByName('first-contentful-paint')[0];
+    L.push('  FCP=' + (fcp ? Math.round(fcp.startTime) + 'ms' : 'n/a'));
+    L.push('  DOMContentLoaded=' + (nav ? Math.round(nav.domContentLoadedEventEnd) + 'ms' : 'n/a'));
+    L.push('  load=' + (nav ? Math.round(nav.loadEventEnd) + 'ms' : 'n/a'));
+
+    L.push('');
+    L.push('=== EXTERNAL REQUESTS (non same-origin) ===');
+    var ext = res.filter(function (r) { return r.name.indexOf(w.location.origin) !== 0; });
+    L.push('  count=' + ext.length);
+    ext.forEach(function (r) { L.push('  ' + r.name); });
+
+    var pre = document.createElement('pre');
+    pre.id = 'qa-report';
+    pre.textContent = L.join('\n');
+    document.body.appendChild(pre);
+  }, 1500);
+});
+</script>
+</body>
+</html>
