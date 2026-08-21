@@ -3,15 +3,21 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\HomeController;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class HomepageTest extends TestCase
 {
     /**
-     * Homepage fase pertama tidak menyentuh database, jadi tidak ada
-     * RefreshDatabase di sini secara sengaja.
+     * Sejak Homepage CMS, konten dibaca dari database dengan config sebagai
+     * fallback. Test ini sengaja TIDAK menjalankan HomepageContentSeeder:
+     * tabelnya ada tetapi barisnya kosong, sehingga seluruh assertion di
+     * bawah membuktikan jalur fallback config masih menghasilkan halaman
+     * yang identik dengan sebelum CMS dibuat.
      */
+    use RefreshDatabase;
+
     public function test_homepage_returns_successful_response(): void
     {
         $this->get('/')->assertOk();
@@ -106,13 +112,23 @@ class HomepageTest extends TestCase
             ->assertSee('og:title', false);
     }
 
-    public function test_homepage_does_not_touch_the_database(): void
+    public function test_homepage_reads_settings_with_at_most_two_queries(): void
     {
-        DB::listen(function (): void {
-            $this->fail('Homepage tidak boleh melakukan query database pada fase ini.');
+        $queries = [];
+
+        DB::listen(function ($query) use (&$queries): void {
+            $queries[] = $query->sql;
         });
 
         $this->get('/')->assertOk();
+
+        // Satu query site settings + satu query homepage settings.
+        // Tidak boleh ada query per section atau per komponen Blade.
+        $this->assertLessThanOrEqual(
+            2,
+            count($queries),
+            'Homepage melakukan query berlebih: '.implode(' | ', $queries),
+        );
     }
 
     public function test_every_image_has_an_alt_attribute(): void
@@ -174,7 +190,8 @@ class HomepageTest extends TestCase
             'homepage.sections' => ['hero', '../../../etc/passwd', 'welcome', 'cta'],
         ]);
 
-        $sections = (new HomeController)->__invoke()->getData()['sections'];
+        // Dependency service di-resolve container, sama seperti saat dispatch.
+        $sections = app()->call([app(HomeController::class), '__invoke'])->getData()['sections'];
 
         $this->assertSame(['sections.hero', 'sections.cta'], $sections);
     }
