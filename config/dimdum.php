@@ -97,6 +97,17 @@ return [
         'items' => [],
     ],
 
+    /*
+    | Pengaturan admin panel.
+    |
+    | 'locale' hanya berlaku untuk request panel (lihat
+    | App\Http\Middleware\SetAdminPanelLocale). Locale aplikasi dan halaman
+    | publik tidak ikut berubah. Set null untuk mengikuti APP_LOCALE.
+    */
+    'admin' => [
+        'locale' => 'id',
+    ],
+
     'seo' => [
         'title' => 'DIMDUM | Dimsum Mulai Rp1.000, Bikin Ketagihan',
         'description' => 'DIMDUM adalah street food dimsum satuan mulai Rp1.000. Bebas pilih varian, bebas menentukan jumlah, dan jajan sesuai budget kamu.',
