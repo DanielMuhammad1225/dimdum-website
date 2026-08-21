@@ -22,17 +22,32 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        $this->registerSuperAdminGate();
+        $this->registerAuthorizationGate();
     }
 
     /**
-     * Super Admin lolos seluruh pemeriksaan permission.
+     * Aturan authorization global DIMDUM.
      *
-     * Bypass ini HANYA berdasarkan role super_admin -- tidak ada email atau
-     * ID yang di-hardcode. Akun nonaktif tidak pernah mendapat bypass, dan
-     * akses panel tetap diverifikasi terpisah lewat User::canAccessPanel().
+     * Urutan evaluasi:
+     *   1. Akun nonaktif  -> false. Seluruh authorization ditolak, termasuk
+     *      permission yang masih ter-assign dan policy apa pun.
+     *   2. Super Admin aktif -> true. Bypass HANYA berdasarkan role, tanpa
+     *      email atau ID yang di-hardcode.
+     *   3. Selain itu -> null, sehingga permission/policy normal tetap jalan.
+     *
+     * Catatan penting soal urutan callback:
+     * spatie/laravel-permission mendaftarkan Gate::before miliknya sendiri
+     * lewat callAfterResolving(Gate::class), sehingga callback-nya selalu
+     * terdaftar LEBIH DULU daripada callback ini. Callback Spatie akan
+     * mengembalikan true untuk permission yang dimiliki user dan Gate berhenti
+     * di hasil non-null yang pertama -- artinya `false` di sini saja TIDAK
+     * cukup untuk memblokir akun nonaktif.
+     *
+     * Karena itu User::hasPermissionTo() juga di-override agar mengembalikan
+     * false saat akun nonaktif. Kombinasi keduanya membuat jalur Spatie
+     * menghasilkan null lalu jatuh ke callback ini.
      */
-    protected function registerSuperAdminGate(): void
+    protected function registerAuthorizationGate(): void
     {
         Gate::before(function (?User $user, string $ability): ?bool {
             if (! $user instanceof User) {
@@ -40,7 +55,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             if (! $user->is_active) {
-                return null;
+                return false;
             }
 
             return $user->hasRole(UserRole::SuperAdmin->value) ? true : null;

@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Spatie\Permission\Contracts\Permission;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password', 'is_active'])]
@@ -20,7 +21,13 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasRoles, Notifiable;
+    use HasFactory, Notifiable;
+
+    // Method Spatie di-alias supaya versi asli tetap bisa dipanggil dari
+    // override hasPermissionTo() di bawah.
+    use HasRoles {
+        hasPermissionTo as protected spatieHasPermissionTo;
+    }
 
     /**
      * Get the attributes that should be cast.
@@ -59,6 +66,31 @@ class User extends Authenticatable implements FilamentUser
         }
 
         return $this->can(PanelPermission::AccessAdminPanel->value);
+    }
+
+    /**
+     * Akun nonaktif tidak pernah dianggap punya permission.
+     *
+     * Override ini menutup jalur milik spatie/laravel-permission: package
+     * tersebut mendaftarkan Gate::before-nya sendiri lewat
+     * callAfterResolving(Gate::class), sehingga selalu dievaluasi SEBELUM
+     * Gate::before milik aplikasi. Tanpa override ini, permission yang masih
+     * ter-assign akan mengembalikan true dan Gate berhenti di situ, sehingga
+     * aturan "nonaktif = ditolak" tidak pernah tercapai.
+     *
+     * Assignment permission di database sengaja TIDAK dihapus -- yang berubah
+     * hanya hasil pemeriksaan authorization-nya. Begitu akun diaktifkan lagi,
+     * seluruh permission langsung berlaku kembali tanpa perlu re-seed.
+     *
+     * @param  \BackedEnum|Permission|string|int  $permission
+     */
+    public function hasPermissionTo($permission, ?string $guardName = null): bool
+    {
+        if (! $this->is_active) {
+            return false;
+        }
+
+        return $this->spatieHasPermissionTo($permission, $guardName);
     }
 
     /**

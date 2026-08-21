@@ -3,6 +3,7 @@
 namespace App\Providers\Filament;
 
 use App\Filament\Pages\Dashboard;
+use App\Http\Middleware\SetAdminPanelLocale;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
@@ -70,7 +71,13 @@ class AdminPanelProvider extends PanelProvider
                 fn (): string => Blade::render('<meta name="robots" content="noindex, nofollow">'),
             )
 
+            /*
+             | Locale panel di-set lewat middleware (API resmi Filament untuk
+             | menyisipkan middleware per panel). isPersistent: true supaya
+             | request update Livewire ikut memakai locale yang sama.
+             */
             ->middleware([
+                SetAdminPanelLocale::class,
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
@@ -80,7 +87,7 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-            ])
+            ], isPersistent: true)
             ->authMiddleware([
                 Authenticate::class,
             ]);
