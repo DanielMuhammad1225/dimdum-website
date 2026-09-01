@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\Provinces\Tables;
 
+use App\Enums\PanelPermission;
+use App\Filament\Support\ReorderGate;
 use App\Models\Province;
+use App\Services\LocationCatalogService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -23,7 +26,27 @@ class ProvincesTable
     {
         return $table
             ->defaultSort('sort_order')
-            ->reorderable('sort_order')
+            /*
+             | Provinsi berurutan global, jadi tidak perlu filter induk --
+             | tetapi tetap butuh permission dan tetap ditutup saat pencarian
+             | aktif (baris tersaring tidak mewakili seluruh urutan).
+             */
+            ->reorderable(
+                'sort_order',
+                condition: fn ($livewire): bool => ReorderGate::allows(
+                    $livewire,
+                    PanelPermission::ManageLocationProvinces,
+                    null,
+                ),
+            )
+            ->reorderRecordsTriggerAction(fn ($action) => $action->label('Atur Urutan'))
+            /*
+             | Filament menyimpan urutan baru lewat SATU query update, bukan
+             | save() per model, jadi event model tidak berjalan dan cache
+             | publik tidak ikut basi dengan sendirinya. Versi cache dinaikkan
+             | di sini supaya halaman publik langsung memakai urutan baru.
+             */
+            ->afterReordering(fn () => LocationCatalogService::flushCache())
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount([
                 'groups',
                 'groups as active_groups_count' => fn (Builder $inner) => $inner->active(),
@@ -131,6 +154,10 @@ class ProvincesTable
              | di bawahnya dalam satu klik tanpa pemeriksaan per baris.
              */
             ->toolbarActions([])
+            ->description(fn ($livewire): ?string => ReorderGate::permits(PanelPermission::ManageLocationProvinces)
+                && ! ReorderGate::showsOneCompleteScope($livewire, null)
+                    ? 'Kosongkan pencarian untuk mengatur urutan dengan seret dan lepas.'
+                    : null)
             ->emptyStateHeading('Belum ada provinsi')
             ->emptyStateDescription('Tambahkan provinsi lebih dulu, lalu Kota/Grup, Area, dan gerobaknya.');
     }

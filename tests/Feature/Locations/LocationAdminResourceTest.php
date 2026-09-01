@@ -69,7 +69,7 @@ class LocationAdminResourceTest extends TestCase
 
         foreach ([
             'Nama area', 'Slug URL', 'Headline halaman', 'Deskripsi area',
-            'Kota/Grup', 'Provinsi', 'Waktu terbit', 'Urutan',
+            'Kota/Grup', 'Provinsi', 'Waktu terbit',
         ] as $label) {
             $this->assertStringContainsString($label, $html, "Label {$label} tidak ditemukan.");
         }
@@ -91,10 +91,11 @@ class LocationAdminResourceTest extends TestCase
 
     public function test_required_area_fields_are_enforced(): void
     {
+        // sort_order tidak lagi diminta dari pengguna -- server yang menghitung.
         Livewire::test(CreateLocationArea::class)
-            ->fillForm(['name' => '', 'slug' => '', 'sort_order' => null])
+            ->fillForm(['name' => '', 'slug' => '', 'location_group_id' => null])
             ->call('create')
-            ->assertHasFormErrors(['name', 'slug', 'sort_order']);
+            ->assertHasFormErrors(['name', 'slug', 'location_group_id']);
     }
 
     public function test_required_location_fields_are_enforced(): void
@@ -492,11 +493,18 @@ class LocationAdminResourceTest extends TestCase
 
     public function test_areas_can_be_reordered(): void
     {
-        $first = LocationArea::factory()->create(['name' => 'A', 'sort_order' => 0]);
-        $second = LocationArea::factory()->create(['name' => 'B', 'sort_order' => 1]);
+        $group = LocationGroup::factory()->create();
+        $first = LocationArea::factory()->for($group, 'group')->create(['name' => 'A', 'sort_order' => 1]);
+        $second = LocationArea::factory()->for($group, 'group')->create(['name' => 'B', 'sort_order' => 2]);
 
-        // reorderTable() adalah method komponen Livewire, bukan helper test.
+        /*
+         | reorderTable() adalah method komponen Livewire, bukan helper test.
+         | Filter induk WAJIB diset lebih dulu: urutan hanya bermakna di dalam
+         | satu Kota/Grup, jadi reorder ditutup selama tabel masih mencampur
+         | Area dari beberapa grup.
+         */
         Livewire::test(ListLocationAreas::class)
+            ->set('tableFilters.location_group_id.value', $group->getKey())
             ->call('reorderTable', [$second->getKey(), $first->getKey()]);
 
         $this->assertLessThan(

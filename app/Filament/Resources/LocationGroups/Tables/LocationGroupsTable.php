@@ -3,7 +3,10 @@
 namespace App\Filament\Resources\LocationGroups\Tables;
 
 use App\Enums\LocationGroupType;
+use App\Enums\PanelPermission;
+use App\Filament\Support\ReorderGate;
 use App\Models\LocationGroup;
+use App\Services\LocationCatalogService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
@@ -22,7 +25,36 @@ class LocationGroupsTable
     {
         return $table
             ->defaultSort('sort_order')
-            ->reorderable('sort_order')
+            // Urutan Kota/Grup hanya bermakna DI DALAM satu provinsi.
+            ->reorderable(
+                'sort_order',
+                condition: fn ($livewire): bool => ReorderGate::allows(
+                    $livewire,
+                    PanelPermission::ManageLocationGroups,
+                    'province_id',
+                ),
+            )
+            ->reorderRecordsTriggerAction(fn ($action) => $action->label('Atur Urutan'))
+            /*
+             | Filament menyimpan urutan baru lewat SATU query update, bukan
+             | save() per model, jadi event model tidak berjalan dan cache
+             | publik tidak ikut basi dengan sendirinya. Versi cache dinaikkan
+             | di sini supaya halaman publik langsung memakai urutan baru.
+             */
+            ->afterReordering(fn () => LocationCatalogService::flushCache())
+            /*
+             | Filament merakit perintah update reorder dari Table::getQuery(),
+             | dan getQuery() TIDAK menerapkan filter tabel. Jadi keanggotaan
+             | induk diperiksa eksplisit di sini: id dari induk lain yang
+             | disisipkan ke payload ditolak sebelum satu baris pun ditulis.
+             */
+            ->beforeReordering(fn (array $order, $livewire) => ReorderGate::assertBelongsToSelectedParent(
+                $livewire,
+                $order,
+                LocationGroup::class,
+                'province_id',
+                'province_id',
+            ))
             // Eager load + count: jumlah query tidak bertambah per baris.
             ->modifyQueryUsing(fn (Builder $query): Builder => $query
                 ->with('province')
@@ -120,6 +152,10 @@ class LocationGroupsTable
             ])
             // Tidak ada bulk delete: satu grup menaungi banyak URL publik.
             ->toolbarActions([])
+            ->description(fn ($livewire): ?string => ReorderGate::permits(PanelPermission::ManageLocationGroups)
+                && ! ReorderGate::showsOneCompleteScope($livewire, 'province_id')
+                    ? ReorderGate::hint('provinsi')
+                    : null)
             ->emptyStateHeading('Belum ada Kota/Grup')
             ->emptyStateDescription('Tambahkan Kota/Grup di bawah sebuah provinsi, lalu masukkan Area-nya.');
     }

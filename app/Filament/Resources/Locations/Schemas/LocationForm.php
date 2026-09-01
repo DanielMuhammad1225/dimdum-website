@@ -350,14 +350,6 @@ class LocationForm
                 ->seconds(false)
                 ->disabled(fn (): bool => ! self::canPublish())
                 ->dehydrated(fn (): bool => self::canPublish()),
-
-            TextInput::make('sort_order')
-                ->label('Urutan dalam wilayah')
-                ->numeric()
-                ->default(0)
-                ->minValue(0)
-                ->maxValue(65535)
-                ->required(),
         ];
     }
 

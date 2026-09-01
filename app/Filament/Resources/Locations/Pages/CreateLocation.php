@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Locations\Pages;
 
 use App\Filament\Resources\Locations\LocationResource;
 use App\Filament\Resources\Locations\Schemas\LocationForm;
+use App\Services\LocationOrderingService;
 use App\Support\WhatsAppNumber;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -39,7 +40,10 @@ class CreateLocation extends CreateRecord
 
         $record->slug = $slug;
         $record->published_at = $publishedAt;
-        $record->save();
+
+        // Urutan terakhir DI DALAM Area terpilih.
+        app(LocationOrderingService::class)
+            ->assignLastPosition($record, ['location_area_id' => $areaId]);
 
         return $record;
     }

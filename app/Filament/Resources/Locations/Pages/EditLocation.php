@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Locations\Pages;
 use App\Filament\Resources\Locations\LocationResource;
 use App\Filament\Resources\Locations\Schemas\LocationForm;
 use App\Models\Location;
+use App\Services\LocationOrderingService;
 use App\Support\WhatsAppNumber;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -93,6 +94,9 @@ class EditLocation extends EditRecord
         /** @var Location $record */
         $areaId = (int) ($data['location_area_id'] ?? $record->location_area_id);
 
+        // Dicatat SEBELUM fill(), supaya perpindahan Area masih terdeteksi.
+        $previousAreaId = (int) $record->location_area_id;
+
         $requestedSlug = $data['slug'] ?? null;
         $hasPublishedField = array_key_exists('published_at', $data);
         $publishedAt = $data['published_at'] ?? null;
@@ -116,6 +120,20 @@ class EditLocation extends EditRecord
         }
 
         $record->save();
+
+        /*
+         | Pindah Area = pindah scope urutan. Record ditempatkan di akhir Area
+         | tujuan, lalu urutan Area lama DAN Area baru dirapikan kembali dalam
+         | satu transaction. Bila Area-nya tidak berubah, sort_order dibiarkan
+         | apa adanya.
+         */
+        if ($previousAreaId !== (int) $record->location_area_id) {
+            app(LocationOrderingService::class)->moveToScope(
+                $record,
+                ['location_area_id' => $previousAreaId],
+                ['location_area_id' => (int) $record->location_area_id],
+            );
+        }
 
         return $record;
     }

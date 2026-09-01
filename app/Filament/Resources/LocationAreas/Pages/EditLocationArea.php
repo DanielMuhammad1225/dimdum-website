@@ -5,6 +5,7 @@ namespace App\Filament\Resources\LocationAreas\Pages;
 use App\Filament\Resources\LocationAreas\LocationAreaResource;
 use App\Models\LocationArea;
 use App\Services\LocationAreaSlugService;
+use App\Services\LocationOrderingService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
@@ -97,6 +98,9 @@ class EditLocationArea extends EditRecord
 
         unset($data['slug'], $data['published_at']);
 
+        // Dicatat SEBELUM fill(), supaya perpindahan grup masih terdeteksi.
+        $previousGroupId = (int) $record->location_group_id;
+
         $record->fill([...$data, 'updated_by' => auth()->id()]);
 
         if ($hasPublishedField) {
@@ -104,6 +108,15 @@ class EditLocationArea extends EditRecord
         }
 
         $record->save();
+
+        // Pindah Kota/Grup = pindah scope urutan.
+        if ($previousGroupId !== (int) $record->location_group_id) {
+            app(LocationOrderingService::class)->moveToScope(
+                $record,
+                ['location_group_id' => $previousGroupId],
+                ['location_group_id' => (int) $record->location_group_id],
+            );
+        }
 
         if (is_string($requestedSlug) && $requestedSlug !== '') {
             $wasPublished = $record->hasEverBeenPublished();

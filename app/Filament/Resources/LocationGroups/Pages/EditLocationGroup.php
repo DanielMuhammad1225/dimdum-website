@@ -4,6 +4,7 @@ namespace App\Filament\Resources\LocationGroups\Pages;
 
 use App\Filament\Resources\LocationGroups\LocationGroupResource;
 use App\Models\LocationGroup;
+use App\Services\LocationOrderingService;
 use App\Services\LocationProvinceSlugService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
@@ -71,6 +72,15 @@ class EditLocationGroup extends EditRecord
                 $record->slug = $slug;
                 $record->save();
             }
+        }
+
+        // Pindah provinsi = pindah scope urutan.
+        if ($previousProvinceId !== (int) $record->province_id) {
+            app(LocationOrderingService::class)->moveToScope(
+                $record,
+                ['province_id' => $previousProvinceId],
+                ['province_id' => (int) $record->province_id],
+            );
         }
 
         if ($previousProvinceId !== (int) $record->province_id && $record->areas()->exists()) {

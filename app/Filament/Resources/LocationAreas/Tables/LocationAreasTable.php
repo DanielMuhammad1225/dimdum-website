@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\LocationAreas\Tables;
 
+use App\Enums\PanelPermission;
+use App\Filament\Support\ReorderGate;
 use App\Models\LocationArea;
+use App\Services\LocationCatalogService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -24,7 +27,36 @@ class LocationAreasTable
     {
         return $table
             ->defaultSort('sort_order')
-            ->reorderable('sort_order')
+            // Urutan Area hanya bermakna DI DALAM satu Kota/Grup.
+            ->reorderable(
+                'sort_order',
+                condition: fn ($livewire): bool => ReorderGate::allows(
+                    $livewire,
+                    PanelPermission::ManageLocationAreas,
+                    'location_group_id',
+                ),
+            )
+            ->reorderRecordsTriggerAction(fn ($action) => $action->label('Atur Urutan'))
+            /*
+             | Filament menyimpan urutan baru lewat SATU query update, bukan
+             | save() per model, jadi event model tidak berjalan dan cache
+             | publik tidak ikut basi dengan sendirinya. Versi cache dinaikkan
+             | di sini supaya halaman publik langsung memakai urutan baru.
+             */
+            ->afterReordering(fn () => LocationCatalogService::flushCache())
+            /*
+             | Filament merakit perintah update reorder dari Table::getQuery(),
+             | dan getQuery() TIDAK menerapkan filter tabel. Jadi keanggotaan
+             | induk diperiksa eksplisit di sini: id dari induk lain yang
+             | disisipkan ke payload ditolak sebelum satu baris pun ditulis.
+             */
+            ->beforeReordering(fn (array $order, $livewire) => ReorderGate::assertBelongsToSelectedParent(
+                $livewire,
+                $order,
+                LocationArea::class,
+                'location_group_id',
+                'location_group_id',
+            ))
             // Eager load induk + count: query tidak bertambah per baris.
             ->modifyQueryUsing(fn (Builder $query): Builder => $query
                 ->with('group.province')
@@ -169,6 +201,10 @@ class LocationAreasTable
              | dalam satu klik tanpa pemeriksaan per baris.
              */
             ->toolbarActions([])
+            ->description(fn ($livewire): ?string => ReorderGate::permits(PanelPermission::ManageLocationAreas)
+                && ! ReorderGate::showsOneCompleteScope($livewire, 'location_group_id')
+                    ? ReorderGate::hint('Kota/Grup')
+                    : null)
             ->emptyStateHeading('Belum ada area')
             ->emptyStateDescription('Tambahkan Kota/Grup lebih dulu, lalu buat Area di bawahnya.');
     }

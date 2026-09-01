@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Provinces\Pages;
 
 use App\Filament\Resources\Provinces\ProvinceResource;
+use App\Services\LocationOrderingService;
 use App\Services\LocationProvinceSlugService;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -43,7 +44,13 @@ class CreateProvince extends CreateRecord
 
         $record->slug = $slug;
         $record->published_at = $publishedAt;
-        $record->save();
+
+        /*
+         | Urutan tidak pernah datang dari form: provinsi baru selalu
+         | ditempatkan di posisi terakhir, dihitung server di dalam satu
+         | transaction. Provinsi tidak punya induk, jadi scope-nya global.
+         */
+        app(LocationOrderingService::class)->assignLastPosition($record, []);
 
         return $record;
     }

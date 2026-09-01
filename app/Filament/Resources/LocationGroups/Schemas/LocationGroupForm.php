@@ -112,15 +112,6 @@ class LocationGroupForm
                             ->helperText('Nonaktif menyembunyikan seluruh area di bawah grup ini.')
                             ->disabled(fn (): bool => ! self::canPublish())
                             ->dehydrated(fn (): bool => self::canPublish()),
-
-                        TextInput::make('sort_order')
-                            ->label('Urutan')
-                            ->helperText('Angka kecil tampil lebih dulu di halaman provinsi.')
-                            ->numeric()
-                            ->default(0)
-                            ->minValue(0)
-                            ->maxValue(65535)
-                            ->required(),
                     ]),
             ]);
     }

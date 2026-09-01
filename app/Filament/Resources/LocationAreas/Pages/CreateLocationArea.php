@@ -4,6 +4,7 @@ namespace App\Filament\Resources\LocationAreas\Pages;
 
 use App\Filament\Resources\LocationAreas\LocationAreaResource;
 use App\Services\LocationAreaSlugService;
+use App\Services\LocationOrderingService;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 
@@ -43,7 +44,11 @@ class CreateLocationArea extends CreateRecord
 
         $record->slug = $slug;
         $record->published_at = $publishedAt;
-        $record->save();
+
+        // Urutan terakhir DI DALAM Kota/Grup terpilih.
+        app(LocationOrderingService::class)->assignLastPosition($record, [
+            'location_group_id' => (int) ($data['location_group_id'] ?? 0),
+        ]);
 
         return $record;
     }

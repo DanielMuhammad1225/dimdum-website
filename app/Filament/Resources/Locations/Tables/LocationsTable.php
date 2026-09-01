@@ -2,7 +2,10 @@
 
 namespace App\Filament\Resources\Locations\Tables;
 
+use App\Enums\PanelPermission;
+use App\Filament\Support\ReorderGate;
 use App\Models\Location;
+use App\Services\LocationCatalogService;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -24,7 +27,39 @@ class LocationsTable
     {
         return $table
             ->defaultSort('sort_order')
-            ->reorderable('sort_order')
+            /*
+             | Gerobak boleh ditata Operator -- ia memang pengelola data harian
+             | -- tetapi tetap hanya di dalam SATU Area yang sudah dipilih.
+             */
+            ->reorderable(
+                'sort_order',
+                condition: fn ($livewire): bool => ReorderGate::allows(
+                    $livewire,
+                    PanelPermission::UpdateLocations,
+                    'location_area_id',
+                ),
+            )
+            ->reorderRecordsTriggerAction(fn ($action) => $action->label('Atur Urutan'))
+            /*
+             | Filament menyimpan urutan baru lewat SATU query update, bukan
+             | save() per model, jadi event model tidak berjalan dan cache
+             | publik tidak ikut basi dengan sendirinya. Versi cache dinaikkan
+             | di sini supaya halaman publik langsung memakai urutan baru.
+             */
+            ->afterReordering(fn () => LocationCatalogService::flushCache())
+            /*
+             | Filament merakit perintah update reorder dari Table::getQuery(),
+             | dan getQuery() TIDAK menerapkan filter tabel. Jadi keanggotaan
+             | induk diperiksa eksplisit di sini: id dari induk lain yang
+             | disisipkan ke payload ditolak sebelum satu baris pun ditulis.
+             */
+            ->beforeReordering(fn (array $order, $livewire) => ReorderGate::assertBelongsToSelectedParent(
+                $livewire,
+                $order,
+                Location::class,
+                'location_area_id',
+                'location_area_id',
+            ))
             // Eager load + count: jumlah query tidak bertambah per baris.
             ->modifyQueryUsing(fn (Builder $query): Builder => $query
                 ->with('area.group.province')
@@ -162,6 +197,10 @@ class LocationsTable
              | satu lewat policy, termasuk pembersihan berkasnya.
              */
             ->toolbarActions([])
+            ->description(fn ($livewire): ?string => ReorderGate::permits(PanelPermission::UpdateLocations)
+                && ! ReorderGate::showsOneCompleteScope($livewire, 'location_area_id')
+                    ? ReorderGate::hint('Area')
+                    : null)
             ->emptyStateHeading('Belum ada gerobak')
             ->emptyStateDescription('Tambahkan gerobak dan hubungkan ke Area yang sesuai.');
     }

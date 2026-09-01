@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\LocationGroups\Pages;
 
 use App\Filament\Resources\LocationGroups\LocationGroupResource;
+use App\Services\LocationOrderingService;
 use App\Services\LocationProvinceSlugService;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
@@ -38,7 +39,10 @@ class CreateLocationGroup extends CreateRecord
         ]);
 
         $record->slug = $slugService->uniqueGroupSlug($provinceId, (string) $desired);
-        $record->save();
+
+        // Urutan terakhir DI DALAM provinsi terpilih, bukan urutan global.
+        app(LocationOrderingService::class)
+            ->assignLastPosition($record, ['province_id' => $provinceId]);
 
         return $record;
     }

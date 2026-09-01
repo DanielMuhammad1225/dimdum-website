@@ -102,15 +102,6 @@ class ProvinceForm
                             ->seconds(false)
                             ->disabled(fn (): bool => ! self::canPublish())
                             ->dehydrated(fn (): bool => self::canPublish()),
-
-                        TextInput::make('sort_order')
-                            ->label('Urutan')
-                            ->helperText('Angka kecil tampil lebih dulu.')
-                            ->numeric()
-                            ->default(0)
-                            ->minValue(0)
-                            ->maxValue(65535)
-                            ->required(),
                     ]),
             ]);
     }
