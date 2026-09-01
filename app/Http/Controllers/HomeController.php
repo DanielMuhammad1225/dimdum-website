@@ -31,7 +31,7 @@ class HomeController extends Controller
     ): View {
         $brand = $siteSettings->brand();
         $homepage = $homepageContent->homepage();
-        $locationAreas = $locationCatalog->visibleAreas();
+        $locationAreas = $locationCatalog->visibleAreasForHomepage();
 
         /*
          | Ketersediaan lokasi kini ditentukan data nyata, bukan flag config.

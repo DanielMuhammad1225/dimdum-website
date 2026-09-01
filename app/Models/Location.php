@@ -13,11 +13,20 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
- * Gerobak DIMDUM.
+ * Gerobak DIMDUM -- titik fisik, tingkat terbawah hierarki.
  *
- * Slug sudah disimpan dan unik per wilayah supaya route detail
- * /lokasi/{area}/{location} bisa ditambahkan nanti. Route itu SENGAJA belum
- * ada pada fase ini.
+ * Induknya adalah Area. Kota/Grup dan Provinsi diturunkan lewat rantai
+ * Location -> LocationArea -> LocationGroup -> Province dan tidak pernah
+ * disimpan ulang di sini.
+ *
+ * Kolom alamat (village, district, city_regency, postal_code) TETAP ada dan
+ * merupakan fakta pos, bukan hierarki. Satu Kota/Grup bertipe pemasaran boleh
+ * mencakup beberapa kota/kabupaten, jadi alamat sungguhan tidak selalu bisa
+ * disimpulkan dari nama induk.
+ *
+ * Slug sudah disimpan dan unik per area supaya route detail
+ * /lokasi/{province}/{area}/{location} bisa ditambahkan nanti. Route itu
+ * SENGAJA belum ada pada fase ini.
  */
 class Location extends Model
 {
@@ -34,12 +43,10 @@ class Location extends Model
     protected $fillable = [
         'location_area_id',
         'name',
-        'filter_label',
         'full_address',
         'village',
         'district',
         'city_regency',
-        'province',
         'postal_code',
         'landmark',
         'operational_hours_text',
@@ -98,16 +105,35 @@ class Location extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
+    /**
+     * Kota/Grup induk, lewat Area. Butuh eager load `area.group`.
+     */
+    public function parentGroup(): ?LocationGroup
+    {
+        return $this->area?->group;
+    }
+
+    /**
+     * Provinsi induk, lewat Area dan Kota/Grup.
+     * Butuh eager load `area.group.province`.
+     */
+    public function parentProvince(): ?Province
+    {
+        return $this->parentGroup()?->province;
+    }
+
     // ---------------------------------------------------------------- scopes
 
     public function scopeActive(Builder $query): Builder
     {
-        return $query->where('is_active', true);
+        return $query->where($query->qualifyColumn('is_active'), true);
     }
 
     public function scopePublished(Builder $query): Builder
     {
-        return $query->whereNotNull('published_at')->where('published_at', '<=', now());
+        return $query
+            ->whereNotNull($query->qualifyColumn('published_at'))
+            ->where($query->qualifyColumn('published_at'), '<=', now());
     }
 
     public function scopePubliclyVisible(Builder $query): Builder
@@ -116,19 +142,23 @@ class Location extends Model
     }
 
     /**
-     * Visibilitas EFEKTIF: gerobak baru tampil bila wilayah induknya juga
-     * tampil. Gerobak aktif di bawah wilayah nonaktif tidak boleh bocor.
+     * Visibilitas EFEKTIF: gerobak baru tampil bila SELURUH leluhurnya juga
+     * tampil -- Area terbit, Kota/Grup aktif, dan Provinsi terbit. Gerobak
+     * aktif di bawah induk tersembunyi tidak boleh bocor.
      */
     public function scopeEffectivelyVisible(Builder $query): Builder
     {
         return $query
             ->publiclyVisible()
-            ->whereHas('area', fn (Builder $area) => $area->publiclyVisible());
+            ->whereHas('area', fn (Builder $area) => $area->effectivelyVisible());
     }
 
     public function scopeOrdered(Builder $query): Builder
     {
-        return $query->orderBy('sort_order')->orderBy('name')->orderBy('id');
+        return $query
+            ->orderBy($query->qualifyColumn('sort_order'))
+            ->orderBy($query->qualifyColumn('name'))
+            ->orderBy($query->qualifyColumn('id'));
     }
 
     // ------------------------------------------------------------ visibility
@@ -143,8 +173,8 @@ class Location extends Model
     }
 
     /**
-     * Termasuk memeriksa wilayah induk. Memakai relasi yang sudah dimuat bila
-     * tersedia supaya tidak memicu query tambahan.
+     * Termasuk memeriksa seluruh rantai induk. Memakai relasi yang sudah
+     * dimuat bila tersedia supaya tidak memicu query tambahan.
      */
     public function isEffectivelyVisible(): bool
     {
@@ -152,7 +182,7 @@ class Location extends Model
             return false;
         }
 
-        return $this->area?->isPubliclyVisible() ?? false;
+        return $this->area?->isEffectivelyVisible() ?? false;
     }
 
     public function hasEverBeenPublished(): bool
@@ -161,21 +191,6 @@ class Location extends Model
     }
 
     // ------------------------------------------------------------- accessors
-
-    /**
-     * Kelompok filter publik: filter_label, lalu district sebagai fallback.
-     * Daftar filter TIDAK PERNAH di-hardcode di Blade.
-     */
-    public function filterGroup(): ?string
-    {
-        foreach ([$this->filter_label, $this->district] as $candidate) {
-            if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
-            }
-        }
-
-        return null;
-    }
 
     /**
      * URL Maps yang sudah dipastikan aman, atau null.

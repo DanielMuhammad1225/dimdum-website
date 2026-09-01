@@ -4,7 +4,9 @@ namespace Tests\Feature\Locations;
 
 use App\Models\Location;
 use App\Models\LocationArea;
+use App\Models\LocationGroup;
 use App\Models\LocationImage;
+use App\Models\Province;
 use App\Services\LocationCatalogService;
 use Database\Seeders\HomepageContentSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -13,19 +15,51 @@ use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 /**
- * Halaman publik /lokasi dan /lokasi/{slug}.
+ * Halaman publik /lokasi, /lokasi/{province}, dan /lokasi/{province}/{area}.
  */
 class PublicLocationPagesTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Provinsi tetap dengan slug yang dapat ditebak, supaya URL dua segmen di
+     * seluruh test ini deterministik.
+     */
+    protected function province(string $slug = 'jawa-barat', string $name = 'Jawa Barat'): Province
+    {
+        return Province::query()->firstWhere('slug', $slug)
+            ?? Province::factory()->published()->create(['name' => $name, 'slug' => $slug]);
+    }
+
+    protected function group(?Province $province = null): LocationGroup
+    {
+        $province ??= $this->province();
+
+        return LocationGroup::query()->where('province_id', $province->getKey())->first()
+            ?? LocationGroup::factory()->for($province, 'province')->create(['name' => 'Kabupaten Uji']);
+    }
+
     protected function areaWithLocation(string $slug, array $areaAttributes = [], array $locationAttributes = []): LocationArea
     {
-        $area = LocationArea::factory()->published()->create(['slug' => $slug, ...$areaAttributes]);
+        $area = LocationArea::factory()->for($this->group(), 'group')
+            ->for($this->group(), 'group')
+            ->published()
+            ->create(['slug' => $slug, ...$areaAttributes]);
 
         Location::factory()->for($area, 'area')->published()->create($locationAttributes);
 
         return $area->fresh();
+    }
+
+    /** URL area publik: dua segmen. */
+    protected function areaUrl(string $areaSlug, string $provinceSlug = 'jawa-barat'): string
+    {
+        return route('locations.area', [$provinceSlug, $areaSlug]);
+    }
+
+    protected function provinceUrl(string $provinceSlug = 'jawa-barat'): string
+    {
+        return route('locations.province', $provinceSlug);
     }
 
     // ------------------------------------------------------------- /lokasi
@@ -35,24 +69,98 @@ class PublicLocationPagesTest extends TestCase
         $this->get('/lokasi')->assertOk();
     }
 
-    public function test_the_index_lists_only_areas_with_visible_locations(): void
+    public function test_the_index_lists_only_provinces_with_visible_locations(): void
     {
-        $withLocation = $this->areaWithLocation('cianjur', ['name' => 'Cianjur']);
+        $this->areaWithLocation('cianjur', ['name' => 'Cianjur']);
 
-        $emptyArea = LocationArea::factory()->published()->create(['name' => 'Wilayah Kosong']);
-        $draftArea = LocationArea::factory()->create(['name' => 'Wilayah Draft']);
-        $inactiveArea = LocationArea::factory()->inactive()->create(['name' => 'Wilayah Nonaktif']);
-        Location::factory()->for($inactiveArea, 'area')->published()->create();
+        // Provinsi terbit tetapi areanya masih draft -> tidak boleh tampil.
+        $empty = $this->province('banten', 'Banten');
+        LocationArea::factory()->for($this->group($empty), 'group')->create(['name' => 'Area Draft']);
+
+        // Provinsi draft dengan area terbit -> tetap tidak boleh tampil.
+        $draftProvince = Province::factory()->create(['name' => 'Provinsi Draft', 'slug' => 'provinsi-draft']);
+        $draftArea = LocationArea::factory()->for($this->group(), 'group')
+            ->for($this->group($draftProvince), 'group')
+            ->published()
+            ->create(['name' => 'Area Tersembunyi']);
+        Location::factory()->for($draftArea, 'area')->published()->create();
 
         $response = $this->get('/lokasi');
 
         $response->assertOk()
-            ->assertSee('Cianjur', false)
-            ->assertDontSee('Wilayah Kosong', false)
-            ->assertDontSee('Wilayah Draft', false)
-            ->assertDontSee('Wilayah Nonaktif', false);
+            ->assertSee('Jawa Barat', false)
+            ->assertDontSee('Banten', false)
+            ->assertDontSee('Provinsi Draft', false)
+            ->assertDontSee('Area Tersembunyi', false);
 
-        $this->assertStringContainsString(route('locations.area', $withLocation->slug), $response->getContent());
+        $this->assertStringContainsString($this->provinceUrl(), $response->getContent());
+    }
+
+    // --------------------------------------------------- /lokasi/{province}
+
+    public function test_the_province_page_groups_areas_under_their_city_or_group(): void
+    {
+        $province = $this->province();
+        $administrative = LocationGroup::factory()->for($province, 'province')
+            ->create(['name' => 'Kabupaten Cianjur']);
+        $marketing = LocationGroup::factory()->for($province, 'province')->marketingGroup()
+            ->create(['name' => 'Bandung Raya']);
+
+        foreach ([[$administrative, 'cipanas', 'Cipanas'], [$marketing, 'dago', 'Dago']] as [$group, $slug, $name]) {
+            $area = LocationArea::factory()->for($group, 'group')->published()->create(['slug' => $slug, 'name' => $name]);
+            Location::factory()->for($area, 'area')->published()->create();
+        }
+
+        $content = $this->get($this->provinceUrl())->assertOk()->getContent();
+
+        foreach ([
+            'Kabupaten Cianjur', 'Bandung Raya', 'Cipanas', 'Dago',
+            'Kota/Kabupaten Administratif', 'Grup Wilayah/Pemasaran',
+        ] as $needle) {
+            $this->assertStringContainsString($needle, $content, "{$needle} tidak dirender.");
+        }
+
+        // Kota/Grup adalah heading, BUKAN tautan -- ia tidak punya halaman.
+        $this->assertStringContainsString($this->areaUrl('cipanas'), $content);
+        $this->assertStringNotContainsString('/lokasi/jawa-barat/kabupaten-cianjur', $content);
+    }
+
+    public function test_a_group_slug_has_no_public_route_of_its_own(): void
+    {
+        $province = $this->province();
+        $group = LocationGroup::factory()->for($province, 'province')->create(['slug' => 'kabupaten-cianjur']);
+        $area = LocationArea::factory()->for($group, 'group')->published()->create(['slug' => 'cipanas']);
+        Location::factory()->for($area, 'area')->published()->create();
+
+        // Slug grup di posisi Area harus 404, bukan menampilkan halaman apa pun.
+        $this->get($this->areaUrl('kabupaten-cianjur'))->assertNotFound();
+    }
+
+    public function test_hidden_provinces_return_404(): void
+    {
+        foreach ([
+            'draft' => Province::factory()->create(['slug' => 'p-draft']),
+            'nonaktif' => Province::factory()->inactive()->create(['slug' => 'p-nonaktif']),
+            'terjadwal' => Province::factory()->scheduled()->create(['slug' => 'p-terjadwal']),
+        ] as $label => $province) {
+            $area = LocationArea::factory()->for($this->group($province), 'group')->published()->create();
+            Location::factory()->for($area, 'area')->published()->create();
+
+            $this->get(route('locations.province', $province->slug))
+                ->assertNotFound("Provinsi {$label} seharusnya 404.");
+        }
+    }
+
+    public function test_the_province_page_shows_an_empty_state_without_visible_areas(): void
+    {
+        $province = $this->province();
+        LocationArea::factory()->for($this->group($province), 'group')->create();
+
+        // Provinsi terbit tanpa area tampil tetap 200 -- bukan 404 -- supaya
+        // iklan yang sudah berjalan tidak mendarat di halaman error.
+        $this->get($this->provinceUrl())
+            ->assertOk()
+            ->assertSee('sedang disiapkan', false);
     }
 
     public function test_the_index_shows_an_empty_state_when_nothing_is_published(): void
@@ -63,12 +171,12 @@ class PublicLocationPagesTest extends TestCase
             ->assertSee('Kembali ke Beranda', false);
     }
 
-    public function test_the_index_orders_areas_by_sort_order_then_name(): void
+    public function test_the_province_page_orders_areas_by_sort_order_then_name(): void
     {
         $this->areaWithLocation('bandung', ['name' => 'Bandung', 'sort_order' => 5]);
         $this->areaWithLocation('cianjur', ['name' => 'Cianjur', 'sort_order' => 1]);
 
-        $content = $this->get('/lokasi')->getContent();
+        $content = $this->get($this->provinceUrl())->getContent();
 
         $this->assertLessThan(
             strpos($content, 'Bandung'),
@@ -83,7 +191,7 @@ class PublicLocationPagesTest extends TestCase
     {
         $this->areaWithLocation('cianjur', ['name' => 'Cianjur']);
 
-        $this->get('/lokasi/cianjur')
+        $this->get($this->areaUrl('cianjur'))
             ->assertOk()
             ->assertSee('Lokasi Gerobak DIMDUM di Cianjur', false)
             ->assertSee('Pilih Lokasi Gerobak', false);
@@ -91,38 +199,38 @@ class PublicLocationPagesTest extends TestCase
 
     public function test_draft_inactive_scheduled_and_deleted_areas_return_404(): void
     {
-        $draft = LocationArea::factory()->create(['slug' => 'draft']);
+        $draft = LocationArea::factory()->for($this->group(), 'group')->create(['slug' => 'draft']);
         Location::factory()->for($draft, 'area')->published()->create();
 
-        $inactive = LocationArea::factory()->inactive()->create(['slug' => 'nonaktif']);
+        $inactive = LocationArea::factory()->for($this->group(), 'group')->inactive()->create(['slug' => 'nonaktif']);
         Location::factory()->for($inactive, 'area')->published()->create();
 
-        $scheduled = LocationArea::factory()->scheduled()->create(['slug' => 'terjadwal']);
+        $scheduled = LocationArea::factory()->for($this->group(), 'group')->scheduled()->create(['slug' => 'terjadwal']);
         Location::factory()->for($scheduled, 'area')->published()->create();
 
         $deleted = $this->areaWithLocation('terhapus');
         $deleted->delete();
 
         foreach (['draft', 'nonaktif', 'terjadwal', 'terhapus', 'tidak-ada'] as $slug) {
-            $this->get("/lokasi/{$slug}")->assertNotFound();
+            $this->get($this->areaUrl($slug))->assertNotFound();
         }
     }
 
     public function test_a_published_area_without_visible_locations_stays_200_with_an_empty_state(): void
     {
-        LocationArea::factory()->published()->create(['slug' => 'kuningan', 'name' => 'Kuningan']);
+        LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'kuningan', 'name' => 'Kuningan']);
 
-        $this->get('/lokasi/kuningan')
+        $this->get($this->areaUrl('kuningan'))
             ->assertOk()
             ->assertSee('Titik lokasi sedang diperbarui', false)
-            ->assertSee('Lihat Wilayah Lain', false)
+            ->assertSee('Lihat Area Lain', false)
             // Tidak ada CTA atau alamat karangan.
             ->assertDontSee('Buka di Google Maps', false);
     }
 
     public function test_only_visible_locations_are_rendered(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
+        $area = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'cianjur']);
 
         Location::factory()->for($area, 'area')->published()->create(['name' => 'Gerobak Tampil']);
         Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Draft']);
@@ -132,7 +240,7 @@ class PublicLocationPagesTest extends TestCase
         $deleted = Location::factory()->for($area, 'area')->published()->create(['name' => 'Gerobak Terhapus']);
         $deleted->delete();
 
-        $this->get('/lokasi/cianjur')
+        $this->get($this->areaUrl('cianjur'))
             ->assertOk()
             ->assertSee('Gerobak Tampil', false)
             ->assertDontSee('Gerobak Draft', false)
@@ -145,7 +253,7 @@ class PublicLocationPagesTest extends TestCase
     {
         $this->areaWithLocation('cianjur');
 
-        $this->assertSame(1, substr_count($this->get('/lokasi/cianjur')->getContent(), '<h1'));
+        $this->assertSame(1, substr_count($this->get($this->areaUrl('cianjur'))->getContent(), '<h1'));
         $this->assertSame(1, substr_count($this->get('/lokasi')->getContent(), '<h1'));
     }
 
@@ -153,7 +261,7 @@ class PublicLocationPagesTest extends TestCase
     {
         $this->areaWithLocation('cianjur');
 
-        foreach (['/lokasi', '/lokasi/cianjur'] as $url) {
+        foreach (['/lokasi', $this->provinceUrl(), $this->areaUrl('cianjur')] as $url) {
             $content = $this->get($url)->getContent();
 
             $this->assertStringNotContainsString('href="#"', $content);
@@ -170,7 +278,7 @@ class PublicLocationPagesTest extends TestCase
             'whatsapp_number' => '6281234567890',
         ]);
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         preg_match_all('/<a\s[^>]*target="_blank"[^>]*>/i', $content, $matches);
 
@@ -181,69 +289,16 @@ class PublicLocationPagesTest extends TestCase
         }
     }
 
-    // ---------------------------------------------------------------- filter
-
-    public function test_the_filter_appears_only_when_there_is_more_than_one_group(): void
-    {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
-
-        Location::factory()->for($area, 'area')->published()->create(['filter_label' => 'Cipanas']);
-
-        $this->get('/lokasi/cianjur')
-            ->assertOk()
-            ->assertDontSee('data-location-filter', false);
-
-        Location::factory()->for($area, 'area')->published()->create(['filter_label' => 'Pacet']);
-
-        $this->get('/lokasi/cianjur')
-            ->assertOk()
-            ->assertSee('data-location-filter', false)
-            ->assertSee('aria-pressed', false)
-            ->assertSee('aria-live="polite"', false)
-            ->assertSee('Cipanas', false)
-            ->assertSee('Pacet', false);
-    }
-
-    public function test_the_filter_falls_back_to_district(): void
-    {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
-
-        Location::factory()->for($area, 'area')->published()->create(['filter_label' => null, 'district' => 'Cipanas']);
-        Location::factory()->for($area, 'area')->published()->create(['filter_label' => null, 'district' => 'Pacet']);
-
-        $this->get('/lokasi/cianjur')
-            ->assertOk()
-            ->assertSee('Cipanas', false)
-            ->assertSee('Pacet', false);
-    }
-
-    public function test_all_cards_stay_visible_without_javascript(): void
-    {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
-
-        Location::factory()->for($area, 'area')->published()->create(['name' => 'Gerobak A', 'filter_label' => 'Cipanas']);
-        Location::factory()->for($area, 'area')->published()->create(['name' => 'Gerobak B', 'filter_label' => 'Pacet']);
-
-        // Bahkan dengan ?filter=, server tetap mengirim seluruh kartu:
-        // penyembunyian dilakukan skrip, bukan server.
-        $this->get('/lokasi/cianjur?filter=Cipanas')
-            ->assertOk()
-            ->assertSee('Gerobak A', false)
-            ->assertSee('Gerobak B', false);
-    }
-
-    // -------------------------------------------------------------- galeri
-
     public function test_the_gallery_only_shows_photos_from_this_area(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
+        $area = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'cianjur']);
         $location = Location::factory()->for($area, 'area')->published()->create();
         LocationImage::factory()->for($location)->cover()->create([
             'image_path' => 'locations/aaa/foto-wilayah-ini.jpg',
             'alt_text' => 'Foto wilayah ini',
         ]);
 
-        $otherArea = LocationArea::factory()->published()->create(['slug' => 'karawang']);
+        $otherArea = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'karawang']);
         $otherLocation = Location::factory()->for($otherArea, 'area')->published()->create();
         LocationImage::factory()->for($otherLocation)->cover()->create([
             'image_path' => 'locations/bbb/foto-wilayah-lain.jpg',
@@ -252,7 +307,7 @@ class PublicLocationPagesTest extends TestCase
 
         // Berkasnya belum ada di disk, jadi keduanya dibuang lapisan render.
         // Yang diuji di sini: tidak ada kebocoran antar wilayah.
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringNotContainsString('foto-wilayah-lain', $content);
         $this->assertStringNotContainsString('Foto wilayah lain', $content);
@@ -260,11 +315,11 @@ class PublicLocationPagesTest extends TestCase
 
     public function test_a_missing_image_file_is_never_rendered(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
+        $area = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'cianjur']);
         $location = Location::factory()->for($area, 'area')->published()->create();
         LocationImage::factory()->for($location)->create(['image_path' => 'locations/aaa/tidak-ada.jpg']);
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringNotContainsString('tidak-ada.jpg', $content);
         $this->assertStringNotContainsString('src=""', $content);
@@ -274,7 +329,7 @@ class PublicLocationPagesTest extends TestCase
     {
         $this->areaWithLocation('cianjur', ['name' => 'Cianjur']);
 
-        $this->get('/lokasi/cianjur')
+        $this->get($this->areaUrl('cianjur'))
             ->assertOk()
             ->assertDontSee('Suasana Gerobak di Cianjur', false);
     }
@@ -290,7 +345,7 @@ class PublicLocationPagesTest extends TestCase
             'operational_hours_text' => null,
         ]);
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringContainsString('Alamat uji lengkap', $content);
         $this->assertStringNotContainsString('Patokan:', $content, 'Label patokan tidak boleh tampil tanpa isi.');
@@ -304,7 +359,7 @@ class PublicLocationPagesTest extends TestCase
             'google_maps_url' => null,
         ]);
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringContainsString('Tautan peta belum tersedia', $content);
         $this->assertStringNotContainsString('href="#"', $content);
@@ -316,7 +371,7 @@ class PublicLocationPagesTest extends TestCase
      */
     public function test_a_dangerous_maps_url_written_straight_into_the_database_is_never_rendered(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
+        $area = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'cianjur']);
 
         foreach ([
             'javascript:alert(1)',
@@ -331,7 +386,7 @@ class PublicLocationPagesTest extends TestCase
             ]);
         }
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringNotContainsString('javascript:', $content);
         $this->assertStringNotContainsString('data:text/html', $content);
@@ -349,7 +404,7 @@ class PublicLocationPagesTest extends TestCase
             'longitude' => 107.1234567,
         ]);
 
-        $this->get('/lokasi/cianjur')
+        $this->get($this->areaUrl('cianjur'))
             ->assertOk()
             ->assertSee('https://www.google.com/maps/search/?api=1&amp;query=-6.8123456%2C107.1234567', false)
             ->assertSee('Buka di Google Maps', false);
@@ -368,7 +423,7 @@ class PublicLocationPagesTest extends TestCase
             'full_address' => '<script>alert("alamat")</script>',
         ]);
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         foreach (['<script>alert("area")', '<script>alert("headline")', '<script>alert("gerobak")', '<script>alert("alamat")', '<img src=x'] as $payload) {
             $this->assertStringNotContainsString($payload, $content, "Payload tidak ter-escape: {$payload}");
@@ -381,15 +436,15 @@ class PublicLocationPagesTest extends TestCase
 
     public function test_the_area_page_query_count_does_not_grow_with_the_number_of_locations(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
+        $area = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'cianjur']);
 
         Location::factory()->for($area, 'area')->published()->create();
 
-        $baseline = $this->countQueries('/lokasi/cianjur');
+        $baseline = $this->countQueries($this->areaUrl('cianjur'));
 
         Location::factory()->count(12)->for($area, 'area')->published()->create();
 
-        $withMany = $this->countQueries('/lokasi/cianjur');
+        $withMany = $this->countQueries($this->areaUrl('cianjur'));
 
         $this->assertSame(
             $baseline,
@@ -400,14 +455,14 @@ class PublicLocationPagesTest extends TestCase
 
     public function test_the_area_page_query_count_stays_constant_with_images(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
+        $area = LocationArea::factory()->for($this->group(), 'group')->published()->create(['slug' => 'cianjur']);
         $location = Location::factory()->for($area, 'area')->published()->create();
 
-        $baseline = $this->countQueries('/lokasi/cianjur');
+        $baseline = $this->countQueries($this->areaUrl('cianjur'));
 
         LocationImage::factory()->count(8)->for($location)->create();
 
-        $this->assertSame($baseline, $this->countQueries('/lokasi/cianjur'));
+        $this->assertSame($baseline, $this->countQueries($this->areaUrl('cianjur')));
     }
 
     public function test_the_index_query_count_stays_constant(): void
@@ -437,8 +492,10 @@ class PublicLocationPagesTest extends TestCase
         $this->get('/')
             ->assertOk()
             ->assertSee('Cianjur', false)
-            ->assertSee(route('locations.area', $area->slug), false)
-            ->assertSee('Lihat Semua Wilayah', false)
+            ->assertSee($this->areaUrl($area->slug), false)
+            ->assertSee('Lihat Semua Lokasi', false)
+            // Konteks provinsi berasal dari hierarki, bukan kolom teks.
+            ->assertSee('Jawa Barat', false)
             ->assertDontSee('Informasi lokasi segera hadir', false);
     }
 
@@ -460,8 +517,8 @@ class PublicLocationPagesTest extends TestCase
     {
         $this->areaWithLocation('cianjur');
 
-        LocationArea::factory()->create(['slug' => 'draft']);
-        $inactive = LocationArea::factory()->inactive()->create(['slug' => 'nonaktif']);
+        LocationArea::factory()->for($this->group(), 'group')->create(['slug' => 'draft']);
+        $inactive = LocationArea::factory()->for($this->group(), 'group')->inactive()->create(['slug' => 'nonaktif']);
         Location::factory()->for($inactive, 'area')->published()->create();
 
         $response = $this->get('/sitemap.xml');
@@ -473,7 +530,7 @@ class PublicLocationPagesTest extends TestCase
 
         $this->assertStringContainsString(route('home'), $xml);
         $this->assertStringContainsString(route('locations.index'), $xml);
-        $this->assertStringContainsString(route('locations.area', 'cianjur'), $xml);
+        $this->assertStringContainsString($this->areaUrl('cianjur'), $xml);
         $this->assertStringNotContainsString('/lokasi/draft', $xml);
         $this->assertStringNotContainsString('/lokasi/nonaktif', $xml);
 

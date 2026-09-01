@@ -178,8 +178,8 @@ class LocationAuthorizationTest extends TestCase
     public static function areaUrlProvider(): array
     {
         return [
-            'daftar wilayah' => ['/admin/wilayah-landing'],
-            'tambah wilayah' => ['/admin/wilayah-landing/create'],
+            'daftar area' => ['/admin/area'],
+            'tambah area' => ['/admin/area/create'],
         ];
     }
 
@@ -194,7 +194,7 @@ class LocationAuthorizationTest extends TestCase
         foreach ([UserRole::SuperAdmin, UserRole::Admin] as $role) {
             $user = $this->user($role);
 
-            $this->actingAs($user)->get('/admin/wilayah-landing')->assertOk();
+            $this->actingAs($user)->get('/admin/area')->assertOk();
             $this->actingAs($user)->get('/admin/gerobak')->assertOk();
             $this->actingAs($user)->get('/admin/gerobak/create')->assertOk();
         }
@@ -205,22 +205,22 @@ class LocationAuthorizationTest extends TestCase
         $operator = $this->user(UserRole::Operator);
 
         // Operator memang perlu melihat daftar wilayah untuk memilih induk.
-        $this->actingAs($operator)->get('/admin/wilayah-landing')->assertOk();
+        $this->actingAs($operator)->get('/admin/area')->assertOk();
         $this->actingAs($operator)->get('/admin/gerobak')->assertOk();
         $this->actingAs($operator)->get('/admin/gerobak/create')->assertOk();
 
         // Tetapi tidak boleh membuat atau mengubah wilayah.
-        $this->actingAs($operator)->get('/admin/wilayah-landing/create')->assertForbidden();
+        $this->actingAs($operator)->get('/admin/area/create')->assertForbidden();
 
         $area = LocationArea::factory()->create();
-        $this->actingAs($operator)->get("/admin/wilayah-landing/{$area->id}/edit")->assertForbidden();
+        $this->actingAs($operator)->get("/admin/area/{$area->id}/edit")->assertForbidden();
     }
 
     public function test_a_user_without_a_role_is_forbidden_everywhere(): void
     {
         $user = $this->user(null);
 
-        foreach (['/admin/wilayah-landing', '/admin/gerobak', '/admin/gerobak/create'] as $url) {
+        foreach (['/admin/area', '/admin/gerobak', '/admin/gerobak/create'] as $url) {
             $this->actingAs($user)->get($url)->assertForbidden();
         }
     }
@@ -230,7 +230,7 @@ class LocationAuthorizationTest extends TestCase
         foreach (UserRole::cases() as $role) {
             $user = $this->user($role, active: false);
 
-            foreach (['/admin/wilayah-landing', '/admin/gerobak', '/admin/gerobak/create'] as $url) {
+            foreach (['/admin/area', '/admin/gerobak', '/admin/gerobak/create'] as $url) {
                 $this->actingAs($user)->get($url)->assertForbidden();
             }
         }

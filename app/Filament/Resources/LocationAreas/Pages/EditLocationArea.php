@@ -20,7 +20,39 @@ class EditLocationArea extends EditRecord
 
     public function getTitle(): string
     {
-        return 'Ubah Wilayah Landing';
+        return 'Ubah Area';
+    }
+
+    /**
+     * Field bantu province_id tidak tersimpan di tabel, jadi diisi ulang dari
+     * induk sebenarnya setiap kali form dibuka.
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        /** @var LocationArea $record */
+        $record = $this->getRecord();
+        $record->loadMissing('group');
+
+        $data['province_id'] = $record->group?->province_id;
+
+        return $data;
+    }
+
+    /**
+     * URL publik area, atau null bila rantai induknya belum tampil.
+     */
+    protected static function publicUrl(LocationArea $record): ?string
+    {
+        if (! $record->isPubliclyVisible()) {
+            return null;
+        }
+
+        $record->loadMissing('group.province');
+        $province = $record->group?->province;
+
+        return $province === null
+            ? null
+            : route('locations.area', [$province->slug, $record->slug]);
     }
 
     protected function getHeaderActions(): array
@@ -30,15 +62,15 @@ class EditLocationArea extends EditRecord
                 ->label('Lihat halaman')
                 ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                 ->color('gray')
-                ->visible(fn (LocationArea $record): bool => $record->isPubliclyVisible())
-                ->url(fn (LocationArea $record): string => route('locations.area', $record->slug), shouldOpenInNewTab: true),
+                ->visible(fn (LocationArea $record): bool => self::publicUrl($record) !== null)
+                ->url(fn (LocationArea $record): string => (string) self::publicUrl($record), shouldOpenInNewTab: true),
 
             DeleteAction::make()
                 ->label('Hapus')
                 ->before(function (LocationArea $record, DeleteAction $action): void {
                     if ($record->locations()->exists()) {
                         $action->failureNotificationTitle(
-                            'Wilayah ini masih memiliki gerobak. Pindahkan atau hapus gerobaknya lebih dulu.'
+                            'Area ini masih memiliki gerobak. Pindahkan atau hapus gerobaknya lebih dulu.'
                         );
                         $action->failure();
                         $action->halt();
@@ -80,8 +112,8 @@ class EditLocationArea extends EditRecord
             if ($slugService->apply($record, $requestedSlug, auth()->id()) && $wasPublished) {
                 Notification::make()
                     ->warning()
-                    ->title('URL wilayah berubah')
-                    ->body("Alamat lama /lokasi/{$previousSlug} kini dialihkan permanen ke /lokasi/{$record->slug}. Perbarui tautan di iklan yang sedang berjalan.")
+                    ->title('URL area berubah')
+                    ->body("Alamat lama .../{$previousSlug} kini dialihkan permanen ke .../{$record->slug}. Perbarui tautan di iklan yang sedang berjalan.")
                     ->persistent()
                     ->send();
             }
@@ -99,7 +131,7 @@ class EditLocationArea extends EditRecord
         if ($record->isPubliclyVisible() && ! $record->locations()->publiclyVisible()->exists()) {
             Notification::make()
                 ->warning()
-                ->title('Wilayah ini belum punya gerobak yang tampil')
+                ->title('Area ini belum punya gerobak yang tampil')
                 ->body('Halaman tetap dapat diakses, tetapi pengunjung hanya melihat pesan "sedang diperbarui". Sebaiknya belum dipakai sebagai tujuan iklan.')
                 ->persistent()
                 ->send();

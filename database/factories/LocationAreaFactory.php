@@ -3,13 +3,14 @@
 namespace Database\Factories;
 
 use App\Models\LocationArea;
+use App\Models\LocationGroup;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
 /**
  * Factory HANYA untuk test.
  *
- * Nama wilayah sengaja memakai penanda "Wilayah Uji" supaya baris yang lolos
+ * Nama area sengaja memakai penanda "Area Uji" supaya baris yang lolos
  * ke database development mudah dikenali. Tidak ada seeder yang memanggil
  * factory ini: data lokasi asli dimasukkan pemilik project lewat admin.
  *
@@ -21,15 +22,14 @@ class LocationAreaFactory extends Factory
 
     public function definition(): array
     {
-        $name = 'Wilayah Uji '.Str::upper(Str::random(5));
+        $name = 'Area Uji '.Str::upper(Str::random(5));
 
         return [
+            'location_group_id' => LocationGroup::factory(),
             'name' => $name,
             'slug' => Str::slug($name),
             'headline' => null,
             'description' => null,
-            'province' => null,
-            'city_regency' => null,
             'seo_title' => null,
             'seo_description' => null,
             'is_active' => false,

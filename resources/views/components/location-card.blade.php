@@ -8,17 +8,13 @@
     Hanya field yang benar-benar terisi yang dirender: tidak ada label kosong,
     tidak ada href="#", dan tombol Maps hanya muncul bila URL-nya sudah lolos
     pemeriksaan di service.
+
+    Pengelompokan gerobak SUDAH menjadi tugas entitas Area, jadi kartu ini
+    tidak lagi membawa label filter berbasis string.
 --}}
 <article
     class="flex h-full flex-col rounded-card border-2 border-brand-brown/10 bg-white p-6 shadow-sticker"
-    data-location-card
-    data-filter="{{ $location['filter_group'] ?? '' }}">
-
-    @if (! empty($location['filter_group']))
-        <p class="mb-3 inline-flex w-fit items-center rounded-pill bg-brand-cream px-3 py-1 text-xs font-semibold text-brand-brown">
-            {{ $location['filter_group'] }}
-        </p>
-    @endif
+    data-location-card>
 
     <h3 class="font-display text-lg font-bold text-brand-brown sm:text-xl">{{ $location['name'] }}</h3>
 

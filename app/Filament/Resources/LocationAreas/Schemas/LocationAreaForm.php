@@ -4,8 +4,12 @@ namespace App\Filament\Resources\LocationAreas\Schemas;
 
 use App\Enums\PanelPermission;
 use App\Models\LocationArea;
+use App\Models\LocationGroup;
+use App\Models\Province;
 use App\Services\LocationAreaSlugService;
+use App\Services\LocationHierarchyService;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
@@ -21,11 +25,11 @@ class LocationAreaForm
     {
         return $schema
             ->components([
-                Section::make('Identitas Wilayah')
-                    ->description('Wilayah landing adalah area pemasaran, bukan wilayah administratif. Satu wilayah boleh mencakup beberapa kecamatan.')
+                Section::make('Identitas Area')
+                    ->description('Area adalah satuan operasional/pemasaran, bukan selalu kecamatan. Halaman Area menjadi tujuan iklan.')
                     ->schema([
                         TextInput::make('name')
-                            ->label('Nama wilayah')
+                            ->label('Nama area')
                             ->placeholder('Contoh: Cianjur')
                             ->required()
                             ->maxLength(120)
@@ -61,34 +65,92 @@ class LocationAreaForm
                                     }
 
                                     if (! app(LocationAreaSlugService::class)->isAvailable($slug, $record?->getKey())) {
-                                        $fail('Slug ini sudah dipakai wilayah lain atau merupakan slug lama yang sedang dialihkan.');
+                                        $fail('Slug ini sudah dipakai area lain atau merupakan slug lama yang sedang dialihkan.');
                                     }
                                 };
                             }),
 
                         TextInput::make('headline')
                             ->label('Headline halaman')
-                            ->helperText('Kosongkan untuk memakai "Lokasi Gerobak DIMDUM di {nama wilayah}".')
+                            ->helperText('Kosongkan untuk memakai "Lokasi Gerobak DIMDUM di {nama area}".')
                             ->maxLength(160),
 
                         Textarea::make('description')
-                            ->label('Deskripsi wilayah')
+                            ->label('Deskripsi area')
                             ->helperText('Kalimat pembuka halaman. Kosongkan untuk memakai kalimat bawaan.')
                             ->maxLength(500)
                             ->rows(3),
                     ]),
 
-                Section::make('Data Administratif')
-                    ->description('Opsional. Hanya untuk konteks tampilan, bukan penentu wilayah landing.')
+                Section::make('Induk Hierarki')
+                    ->description('Area wajib berada di bawah satu Kota/Grup. Provinsi hanya membantu menyaring pilihan dan TIDAK disimpan di Area -- ia diturunkan lewat Kota/Grup.')
                     ->columns(2)
                     ->schema([
-                        TextInput::make('city_regency')
-                            ->label('Kota/Kabupaten')
-                            ->maxLength(120),
-
-                        TextInput::make('province')
+                        /*
+                         | Field bantu. dehydrated(false) memastikan nilainya
+                         | TIDAK pernah ikut tersimpan, sehingga tidak ada
+                         | province_id redundan di tabel location_areas.
+                         */
+                        Select::make('province_id')
                             ->label('Provinsi')
-                            ->maxLength(120),
+                            ->helperText('Menyaring daftar Kota/Grup di sebelahnya.')
+                            ->options(fn (): array => Province::query()
+                                ->orderBy('name')
+                                ->pluck('name', 'id')
+                                ->all())
+                            ->searchable()
+                            ->preload()
+                            ->native(false)
+                            ->dehydrated(false)
+                            ->live()
+                            ->afterStateUpdated(fn (Set $set) => $set('location_group_id', null)),
+
+                        Select::make('location_group_id')
+                            ->label('Kota/Grup')
+                            ->helperText('Pilih provinsi lebih dulu untuk melihat daftarnya.')
+                            ->options(function (Get $get): array {
+                                $provinceId = $get('province_id');
+
+                                return LocationGroup::query()
+                                    ->when($provinceId, fn ($query) => $query->where('province_id', $provinceId))
+                                    ->orderBy('name')
+                                    ->pluck('name', 'id')
+                                    ->all();
+                            })
+                            ->searchable()
+                            ->preload()
+                            ->required()
+                            ->native(false)
+                            ->exists('location_groups', 'id')
+                            /*
+                             | Cascading select hanyalah kenyamanan tampilan.
+                             | Dua aturan ini ditegakkan DI SERVER, karena form
+                             | apa pun bisa dikirim ulang dengan kombinasi yang
+                             | tidak sah tanpa menyentuh antarmuka.
+                             */
+                            ->rule(function (?LocationArea $record, Get $get): callable {
+                                return function (string $attribute, mixed $value, callable $fail) use ($record, $get): void {
+                                    $hierarchy = app(LocationHierarchyService::class);
+                                    $groupId = $value === null ? null : (int) $value;
+                                    $provinceId = $get('province_id');
+
+                                    if ($provinceId !== null && $provinceId !== ''
+                                        && ! $hierarchy->groupBelongsToProvince($groupId, (int) $provinceId)) {
+                                        $fail('Kota/Grup yang dipilih tidak berada di provinsi tersebut.');
+
+                                        return;
+                                    }
+
+                                    $reason = $hierarchy->rejectionReasonForAreaMove(
+                                        $record ?? new LocationArea,
+                                        $groupId,
+                                    );
+
+                                    if ($reason !== null) {
+                                        $fail($reason);
+                                    }
+                                };
+                            }),
                     ]),
 
                 Section::make('SEO')
@@ -105,12 +167,12 @@ class LocationAreaForm
                     ]),
 
                 Section::make('Publikasi')
-                    ->description('Halaman baru tampil di publik bila AKTIF dan waktu terbitnya sudah lewat.')
+                    ->description('Area tampil bila AKTIF, waktu terbitnya sudah lewat, DAN Kota/Grup serta provinsinya juga tampil.')
                     ->columns(2)
                     ->schema([
                         Toggle::make('is_active')
                             ->label('Aktif')
-                            ->helperText('Nonaktif berarti halaman wilayah menjadi 404.')
+                            ->helperText('Nonaktif berarti halaman area menjadi 404.')
                             ->disabled(fn (): bool => ! self::canPublish())
                             ->dehydrated(fn (): bool => self::canPublish()),
 

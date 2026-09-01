@@ -24,10 +24,13 @@ class LocationModelTest extends TestCase
     public function test_all_location_tables_exist(): void
     {
         foreach ([
+            'provinces',
+            'location_groups',
             'location_areas',
             'locations',
             'location_images',
             'location_area_slug_redirects',
+            'location_province_slug_redirects',
         ] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Tabel {$table} tidak ada.");
         }
@@ -36,17 +39,21 @@ class LocationModelTest extends TestCase
     public function test_area_columns_are_present(): void
     {
         $this->assertTrue(Schema::hasColumns('location_areas', [
-            'id', 'name', 'slug', 'headline', 'description', 'province', 'city_regency',
+            'id', 'location_group_id', 'name', 'slug', 'headline', 'description',
             'seo_title', 'seo_description', 'is_active', 'published_at', 'sort_order',
             'created_by', 'updated_by', 'created_at', 'updated_at', 'deleted_at',
         ]));
+
+        // Kolom teks yang digantikan hierarki tidak boleh tertinggal.
+        $this->assertFalse(Schema::hasColumn('location_areas', 'province'));
+        $this->assertFalse(Schema::hasColumn('location_areas', 'city_regency'));
     }
 
     public function test_location_columns_are_present(): void
     {
         $this->assertTrue(Schema::hasColumns('locations', [
-            'id', 'location_area_id', 'name', 'slug', 'filter_label', 'full_address',
-            'village', 'district', 'city_regency', 'province', 'postal_code', 'landmark',
+            'id', 'location_area_id', 'name', 'slug', 'full_address',
+            'village', 'district', 'city_regency', 'postal_code', 'landmark',
             'operational_hours_text', 'whatsapp_number', 'latitude', 'longitude',
             'google_maps_url', 'is_active', 'published_at', 'sort_order',
             'created_by', 'updated_by', 'created_at', 'updated_at', 'deleted_at',
@@ -194,7 +201,7 @@ class LocationModelTest extends TestCase
         $location = Location::factory()->for($hiddenArea, 'area')->published()->create();
 
         $this->assertTrue($location->isPubliclyVisible(), 'Gerobaknya sendiri memang aktif dan terbit.');
-        $this->assertFalse($location->isEffectivelyVisible(), 'Tetapi wilayahnya tidak tampil.');
+        $this->assertFalse($location->isEffectivelyVisible(), 'Tetapi areanya tidak tampil.');
 
         $this->assertSame(0, Location::query()->effectivelyVisible()->count());
     }
@@ -278,25 +285,12 @@ class LocationModelTest extends TestCase
         $area = LocationArea::factory()->create(['name' => 'Cianjur', 'headline' => null, 'description' => null]);
 
         $this->assertSame('Lokasi Gerobak DIMDUM di Cianjur', $area->publicHeadline());
-        $this->assertSame('Temukan gerobak DIMDUM yang tersedia di wilayah Cianjur.', $area->publicDescription());
+        $this->assertSame('Temukan gerobak DIMDUM yang tersedia di area Cianjur.', $area->publicDescription());
 
         $area->headline = '   ';
         $this->assertSame('Lokasi Gerobak DIMDUM di Cianjur', $area->publicHeadline(), 'Spasi saja tetap dianggap kosong.');
 
         $area->headline = 'Headline khusus';
         $this->assertSame('Headline khusus', $area->publicHeadline());
-    }
-
-    public function test_filter_group_falls_back_to_district(): void
-    {
-        $location = Location::factory()->create(['filter_label' => null, 'district' => 'Cipanas']);
-        $this->assertSame('Cipanas', $location->filterGroup());
-
-        $location->filter_label = 'Pusat Kota';
-        $this->assertSame('Pusat Kota', $location->filterGroup());
-
-        $location->filter_label = null;
-        $location->district = null;
-        $this->assertNull($location->filterGroup());
     }
 }

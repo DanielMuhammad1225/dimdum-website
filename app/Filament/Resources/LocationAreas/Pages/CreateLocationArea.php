@@ -13,7 +13,7 @@ class CreateLocationArea extends CreateRecord
 
     public function getTitle(): string
     {
-        return 'Tambah Wilayah Landing';
+        return 'Tambah Area';
     }
 
     /**

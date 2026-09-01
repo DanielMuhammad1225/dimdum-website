@@ -27,7 +27,7 @@ class LocationsTable
             ->reorderable('sort_order')
             // Eager load + count: jumlah query tidak bertambah per baris.
             ->modifyQueryUsing(fn (Builder $query): Builder => $query
-                ->with('area')
+                ->with('area.group.province')
                 ->withCount('images'))
             ->columns([
                 TextColumn::make('name')
@@ -37,19 +37,31 @@ class LocationsTable
                     ->weight('bold'),
 
                 TextColumn::make('area.name')
-                    ->label('Wilayah')
+                    ->label('Area')
                     ->badge()
                     ->color('gray')
                     ->sortable(),
 
+                TextColumn::make('area.group.name')
+                    ->label('Kota/Grup')
+                    ->badge()
+                    ->color('gray')
+                    ->toggleable(),
+
+                TextColumn::make('area.group.province.name')
+                    ->label('Provinsi')
+                    ->badge()
+                    ->color('gray')
+                    ->toggleable(),
+
                 TextColumn::make('district')
                     ->label('Area administratif')
                     ->formatStateUsing(fn (Location $record): string => collect([
+                        $record->village,
                         $record->district,
                         $record->city_regency,
-                        $record->province,
                     ])->filter()->implode(', ') ?: '-')
-                    ->searchable(['district', 'city_regency', 'province'])
+                    ->searchable(['village', 'district', 'city_regency'])
                     ->wrap()
                     ->color('gray'),
 
@@ -75,7 +87,7 @@ class LocationsTable
                     })
                     // Menjelaskan kenapa gerobak terbit tetap tidak tampil.
                     ->tooltip(fn (Location $record): ?string => $record->isPubliclyVisible() && ! $record->isEffectivelyVisible()
-                        ? 'Gerobak ini sudah terbit, tetapi wilayahnya belum tampil publik sehingga belum terlihat pengunjung.'
+                        ? 'Gerobak ini sudah terbit, tetapi Area, Kota/Grup, atau provinsinya belum tampil sehingga belum terlihat pengunjung.'
                         : null),
 
                 TextColumn::make('maps_status')
@@ -104,7 +116,7 @@ class LocationsTable
             ])
             ->filters([
                 SelectFilter::make('location_area_id')
-                    ->label('Wilayah')
+                    ->label('Area')
                     ->relationship('area', 'name')
                     ->searchable()
                     ->preload(),
@@ -129,13 +141,16 @@ class LocationsTable
             ])
             ->recordActions([
                 Action::make('preview')
-                    ->label('Lihat wilayah')
+                    ->label('Lihat area')
                     ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                     ->color('gray')
                     // Halaman detail gerobak belum ada, jadi preview mengarah
-                    // ke landing wilayahnya.
-                    ->visible(fn (Location $record): bool => $record->area?->isPubliclyVisible() ?? false)
-                    ->url(fn (Location $record): string => route('locations.area', $record->area->slug), shouldOpenInNewTab: true),
+                    // ke halaman Area induknya.
+                    ->visible(fn (Location $record): bool => $record->area?->isEffectivelyVisible() ?? false)
+                    ->url(fn (Location $record): string => route(
+                        'locations.area',
+                        [$record->area->group->province->slug, $record->area->slug],
+                    ), shouldOpenInNewTab: true),
 
                 EditAction::make()->label('Ubah'),
                 DeleteAction::make()->label('Hapus'),
@@ -148,7 +163,7 @@ class LocationsTable
              */
             ->toolbarActions([])
             ->emptyStateHeading('Belum ada gerobak')
-            ->emptyStateDescription('Tambahkan gerobak dan hubungkan ke wilayah landing yang sesuai.');
+            ->emptyStateDescription('Tambahkan gerobak dan hubungkan ke Area yang sesuai.');
     }
 
     protected static function publicationLabel(Location $record): string
@@ -165,6 +180,6 @@ class LocationsTable
             return 'Nonaktif';
         }
 
-        return $record->isEffectivelyVisible() ? 'Tampil' : 'Wilayah belum terbit';
+        return $record->isEffectivelyVisible() ? 'Tampil' : 'Induk belum tampil';
     }
 }

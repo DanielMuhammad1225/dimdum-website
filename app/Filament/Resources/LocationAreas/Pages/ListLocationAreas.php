@@ -12,18 +12,18 @@ class ListLocationAreas extends ListRecords
 
     public function getTitle(): string
     {
-        return 'Wilayah Landing';
+        return 'Area';
     }
 
     public function getSubheading(): ?string
     {
-        return 'Wilayah pemasaran yang menjadi halaman tujuan iklan. Satu wilayah menampung banyak gerobak.';
+        return 'Satuan operasional di bawah Kota/Grup. Halaman Area menjadi tujuan iklan dan menampung banyak gerobak.';
     }
 
     protected function getHeaderActions(): array
     {
         return [
-            CreateAction::make()->label('Tambah Wilayah'),
+            CreateAction::make()->label('Tambah Area'),
         ];
     }
 }

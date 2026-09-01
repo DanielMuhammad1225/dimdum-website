@@ -6,8 +6,11 @@ use App\Enums\PanelPermission;
 use App\Filament\Support\UploadedImage;
 use App\Models\Location;
 use App\Models\LocationArea;
+use App\Models\LocationGroup;
+use App\Models\Province;
 use App\Services\ImageMetadata;
 use App\Services\LocationAreaSlugService;
+use App\Services\LocationHierarchyService;
 use App\Support\MapsUrl;
 use App\Support\WhatsAppNumber;
 use Filament\Forms\Components\DateTimePicker;
@@ -47,14 +50,106 @@ class LocationForm
     protected static function identityFields(): array
     {
         return [
+            /*
+             | Tiga select bertingkat: Provinsi -> Kota/Grup -> Area.
+             | HANYA location_area_id yang disimpan. Dua select di atasnya
+             | memakai dehydrated(false) supaya tidak ada FK redundan di
+             | tabel locations -- provinsi dan grup diturunkan lewat Area.
+             |
+             | Cascading di UI hanya kenyamanan; keabsahan rantainya
+             | diperiksa ulang DI SERVER pada rule location_area_id.
+             */
+            Select::make('province_id')
+                ->label('Provinsi')
+                ->helperText('Menyaring daftar Kota/Grup dan Area di bawahnya.')
+                ->options(fn (): array => Province::query()
+                    ->orderBy('name')
+                    ->pluck('name', 'id')
+                    ->all())
+                ->searchable()
+                ->preload()
+                ->native(false)
+                ->dehydrated(false)
+                ->live()
+                ->afterStateUpdated(function (Set $set): void {
+                    $set('location_group_id', null);
+                    $set('location_area_id', null);
+                }),
+
+            Select::make('location_group_id')
+                ->label('Kota/Grup')
+                ->helperText('Pilih provinsi lebih dulu.')
+                ->options(function (Get $get): array {
+                    $provinceId = $get('province_id');
+
+                    return LocationGroup::query()
+                        ->when($provinceId, fn ($query) => $query->where('province_id', $provinceId))
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->all();
+                })
+                ->searchable()
+                ->preload()
+                ->native(false)
+                ->dehydrated(false)
+                ->live()
+                ->afterStateUpdated(fn (Set $set) => $set('location_area_id', null)),
+
             Select::make('location_area_id')
-                ->label('Wilayah landing')
-                ->helperText('Wilayah menentukan halaman publik tempat gerobak ini tampil.')
-                ->relationship('area', 'name')
+                ->label('Area')
+                ->helperText('Area menentukan halaman publik tempat gerobak ini tampil.')
+                ->options(function (Get $get): array {
+                    $groupId = $get('location_group_id');
+                    $provinceId = $get('province_id');
+
+                    return LocationArea::query()
+                        ->when($groupId, fn ($query) => $query->where('location_group_id', $groupId))
+                        ->when(
+                            ! $groupId && $provinceId,
+                            fn ($query) => $query->whereHas('group', fn ($g) => $g->where('province_id', $provinceId)),
+                        )
+                        ->orderBy('name')
+                        ->pluck('name', 'id')
+                        ->all();
+                })
                 ->searchable()
                 ->preload()
                 ->required()
-                ->native(false),
+                ->native(false)
+                ->exists('location_areas', 'id')
+                ->rule(function (Get $get): callable {
+                    return function (string $attribute, mixed $value, callable $fail) use ($get): void {
+                        $areaId = $value === null ? null : (int) $value;
+
+                        if ($areaId === null) {
+                            return;
+                        }
+
+                        $area = LocationArea::query()->whereKey($areaId)->first();
+
+                        if ($area === null) {
+                            $fail('Area yang dipilih tidak ditemukan.');
+
+                            return;
+                        }
+
+                        $hierarchy = app(LocationHierarchyService::class);
+                        $groupId = $get('location_group_id');
+                        $provinceId = $get('province_id');
+
+                        if ($groupId !== null && $groupId !== ''
+                            && (int) $area->location_group_id !== (int) $groupId) {
+                            $fail('Area yang dipilih tidak berada di Kota/Grup tersebut.');
+
+                            return;
+                        }
+
+                        if ($provinceId !== null && $provinceId !== ''
+                            && ! $hierarchy->groupBelongsToProvince((int) $area->location_group_id, (int) $provinceId)) {
+                            $fail('Area yang dipilih tidak berada di provinsi tersebut.');
+                        }
+                    };
+                }),
 
             TextInput::make('name')
                 ->label('Nama gerobak')
@@ -70,7 +165,7 @@ class LocationForm
 
             TextInput::make('slug')
                 ->label('Slug')
-                ->helperText('Dipakai untuk halaman detail gerobak yang akan dibuat pada fase berikutnya. Harus unik di dalam satu wilayah.')
+                ->helperText('Dipakai untuk halaman detail gerobak yang akan dibuat pada fase berikutnya. Harus unik di dalam satu Area.')
                 ->maxLength(180)
                 ->disabled(fn (): bool => ! self::canChangeSlug())
                 ->dehydrated(fn (): bool => self::canChangeSlug())
@@ -79,10 +174,6 @@ class LocationForm
                     'regex' => 'Slug hanya boleh huruf kecil, angka, dan tanda hubung.',
                 ]),
 
-            TextInput::make('filter_label')
-                ->label('Label filter')
-                ->helperText('Kelompok filter di halaman wilayah. Kosongkan untuk memakai kecamatan.')
-                ->maxLength(120),
         ];
     }
 
@@ -99,13 +190,12 @@ class LocationForm
                 ->maxLength(500)
                 ->rows(3),
 
-            Section::make('Rincian Wilayah')
+            Section::make('Rincian Alamat')
                 ->columns(2)
                 ->schema([
                     TextInput::make('village')->label('Kelurahan/Desa')->maxLength(120),
                     TextInput::make('district')->label('Kecamatan')->maxLength(120),
                     TextInput::make('city_regency')->label('Kota/Kabupaten')->maxLength(120),
-                    TextInput::make('province')->label('Provinsi')->maxLength(120),
 
                     TextInput::make('postal_code')
                         ->label('Kode pos')

@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\SoftDeletingScope;
 use UnitEnum;
 
 /**
- * Wilayah landing -- area pemasaran publik yang menjadi destination iklan.
+ * Area -- satuan operasional/pemasaran yang menjadi destination iklan.
  *
  * Authorization sepenuhnya berasal dari LocationAreaPolicy (server-side).
  * Filament memakai policy yang sama untuk menyembunyikan navigasi DAN untuk
@@ -33,15 +33,15 @@ class LocationAreaResource extends Resource
 
     protected static string|UnitEnum|null $navigationGroup = 'Lokasi Gerobak';
 
-    protected static ?int $navigationSort = 10;
+    protected static ?int $navigationSort = 30;
 
-    protected static ?string $slug = 'wilayah-landing';
+    protected static ?string $slug = 'area';
 
-    protected static ?string $modelLabel = 'Wilayah Landing';
+    protected static ?string $modelLabel = 'Area';
 
-    protected static ?string $pluralModelLabel = 'Wilayah Landing';
+    protected static ?string $pluralModelLabel = 'Area';
 
-    protected static ?string $navigationLabel = 'Wilayah Landing';
+    protected static ?string $navigationLabel = 'Area';
 
     protected static ?string $recordTitleAttribute = 'name';
 
@@ -71,8 +71,8 @@ class LocationAreaResource extends Resource
 
     /**
      * Navigasi dan akses memakai sumber yang sama: permission view_locations
-     * lewat policy. Operator tetap melihat daftar wilayah (read-only) karena
-     * ia butuh memilih wilayah saat membuat gerobak.
+     * lewat policy. Operator tetap melihat daftar area (read-only) karena
+     * ia butuh memilih area saat membuat gerobak.
      */
     public static function canAccess(): bool
     {

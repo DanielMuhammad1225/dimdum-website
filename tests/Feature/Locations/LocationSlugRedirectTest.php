@@ -5,15 +5,19 @@ namespace Tests\Feature\Locations;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationAreaSlugRedirect;
+use App\Models\LocationGroup;
+use App\Models\LocationProvinceSlugRedirect;
+use App\Models\Province;
 use App\Services\LocationAreaSlugService;
+use App\Services\LocationProvinceSlugService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 /**
- * Kebijakan slug wilayah dan redirect 301.
+ * Kebijakan slug provinsi + area dan redirect 301.
  *
- * Halaman wilayah dipakai sebagai destination iklan, jadi URL yang pernah
- * terbit tidak boleh mati.
+ * Halaman area dipakai sebagai destination iklan, jadi URL yang pernah terbit
+ * tidak boleh mati -- termasuk ketika segmen provinsinya yang berganti.
  */
 class LocationSlugRedirectTest extends TestCase
 {
@@ -24,12 +28,35 @@ class LocationSlugRedirectTest extends TestCase
         return app(LocationAreaSlugService::class);
     }
 
+    protected function provinceSlugService(): LocationProvinceSlugService
+    {
+        return app(LocationProvinceSlugService::class);
+    }
+
+    /**
+     * Provinsi tetap dengan slug yang dapat ditebak, supaya URL dua segmen di
+     * seluruh test ini deterministik.
+     */
+    protected function province(): Province
+    {
+        return Province::query()->firstWhere('slug', 'jawa-barat')
+            ?? Province::factory()->published()->create(['name' => 'Jawa Barat', 'slug' => 'jawa-barat']);
+    }
+
     protected function publishedArea(string $slug): LocationArea
     {
-        $area = LocationArea::factory()->published()->create(['slug' => $slug]);
+        $group = LocationGroup::factory()->for($this->province(), 'province')->create();
+
+        $area = LocationArea::factory()->for($group, 'group')->published()->create(['slug' => $slug]);
         Location::factory()->for($area, 'area')->published()->create();
 
         return $area->fresh();
+    }
+
+    /** URL publik dua segmen di bawah provinsi tetap di atas. */
+    protected function url(string $areaSlug, string $provinceSlug = 'jawa-barat'): string
+    {
+        return route('locations.area', [$provinceSlug, $areaSlug]);
     }
 
     // ------------------------------------------------------- canonical 200
@@ -38,7 +65,7 @@ class LocationSlugRedirectTest extends TestCase
     {
         $this->publishedArea('cianjur');
 
-        $this->get('/lokasi/cianjur')->assertOk();
+        $this->get($this->url('cianjur'))->assertOk();
     }
 
     // ---------------------------------------------------------- redirect
@@ -49,11 +76,11 @@ class LocationSlugRedirectTest extends TestCase
 
         $this->slugService()->apply($area, 'cianjur-kota');
 
-        $this->get('/lokasi/cianjur')
+        $this->get($this->url('cianjur'))
             ->assertStatus(301)
-            ->assertRedirect(route('locations.area', 'cianjur-kota'));
+            ->assertRedirect($this->url('cianjur-kota'));
 
-        $this->get('/lokasi/cianjur-kota')->assertOk();
+        $this->get($this->url('cianjur-kota'))->assertOk();
     }
 
     public function test_repeated_slug_changes_all_point_at_the_newest_canonical(): void
@@ -65,12 +92,12 @@ class LocationSlugRedirectTest extends TestCase
 
         // Kedua slug lama menuju canonical terbaru dalam SATU lompatan.
         foreach (['slug-a', 'slug-b'] as $old) {
-            $this->get("/lokasi/{$old}")
+            $this->get($this->url($old))
                 ->assertStatus(301)
-                ->assertRedirect(route('locations.area', 'slug-c'));
+                ->assertRedirect($this->url('slug-c'));
         }
 
-        $this->get('/lokasi/slug-c')->assertOk();
+        $this->get($this->url('slug-c'))->assertOk();
     }
 
     public function test_redirects_never_form_a_loop(): void
@@ -87,11 +114,11 @@ class LocationSlugRedirectTest extends TestCase
             'Slug canonical tidak boleh tercatat sebagai redirect.'
         );
 
-        $this->get('/lokasi/slug-a')->assertOk();
+        $this->get($this->url('slug-a'))->assertOk();
 
-        $this->get('/lokasi/slug-b')
+        $this->get($this->url('slug-b'))
             ->assertStatus(301)
-            ->assertRedirect(route('locations.area', 'slug-a'));
+            ->assertRedirect($this->url('slug-a'));
     }
 
     public function test_a_draft_area_records_no_redirect_when_its_slug_changes(): void
@@ -111,8 +138,101 @@ class LocationSlugRedirectTest extends TestCase
 
         $area->fresh()->update(['is_active' => false]);
 
-        $this->get('/lokasi/cianjur')->assertNotFound();
-        $this->get('/lokasi/cianjur-kota')->assertNotFound();
+        $this->get($this->url('cianjur'))->assertNotFound();
+        $this->get($this->url('cianjur-kota'))->assertNotFound();
+    }
+
+    // ------------------------------------------- kombinasi provinsi + area
+
+    public function test_an_old_province_slug_with_the_current_area_redirects(): void
+    {
+        $this->publishedArea('cianjur');
+
+        $this->provinceSlugService()->apply($this->province()->fresh(), 'jabar');
+
+        $this->get($this->url('cianjur', 'jawa-barat'))
+            ->assertStatus(301)
+            ->assertRedirect($this->url('cianjur', 'jabar'));
+
+        $this->get($this->url('cianjur', 'jabar'))->assertOk();
+    }
+
+    public function test_the_current_province_with_an_old_area_slug_redirects(): void
+    {
+        $area = $this->publishedArea('cianjur');
+
+        $this->slugService()->apply($area, 'cianjur-kota');
+
+        $this->get($this->url('cianjur'))
+            ->assertStatus(301)
+            ->assertRedirect($this->url('cianjur-kota'));
+    }
+
+    public function test_both_segments_outdated_resolve_in_a_single_hop(): void
+    {
+        $area = $this->publishedArea('cianjur');
+
+        $this->slugService()->apply($area, 'cianjur-kota');
+        $this->provinceSlugService()->apply($this->province()->fresh(), 'jabar');
+
+        // Satu lompatan langsung ke canonical terbaru, bukan berantai.
+        $this->get($this->url('cianjur', 'jawa-barat'))
+            ->assertStatus(301)
+            ->assertRedirect($this->url('cianjur-kota', 'jabar'));
+
+        $this->get($this->url('cianjur-kota', 'jabar'))->assertOk();
+    }
+
+    public function test_a_mismatched_province_and_area_combination_is_404(): void
+    {
+        $this->publishedArea('cianjur');
+
+        // Provinsi lain yang benar-benar ada, tetapi bukan induk area ini.
+        $other = Province::factory()->published()->create(['slug' => 'banten', 'name' => 'Banten']);
+        $otherGroup = LocationGroup::factory()->for($other, 'province')->create();
+        $otherArea = LocationArea::factory()->for($otherGroup, 'group')->published()->create(['slug' => 'serang']);
+        Location::factory()->for($otherArea, 'area')->published()->create();
+
+        // Kombinasi karangan tidak boleh menghasilkan halaman duplikat.
+        $this->get($this->url('cianjur', 'banten'))->assertNotFound();
+        $this->get($this->url('serang'))->assertNotFound();
+        $this->get($this->url('cianjur', 'provinsi-tidak-ada'))->assertNotFound();
+    }
+
+    public function test_a_province_page_redirects_from_its_old_slug(): void
+    {
+        $this->publishedArea('cianjur');
+
+        $this->provinceSlugService()->apply($this->province()->fresh(), 'jabar');
+
+        $this->get(route('locations.province', 'jawa-barat'))
+            ->assertStatus(301)
+            ->assertRedirect(route('locations.province', 'jabar'));
+
+        $this->get(route('locations.province', 'jabar'))->assertOk();
+    }
+
+    public function test_repeated_province_slug_changes_never_chain(): void
+    {
+        $this->publishedArea('cianjur');
+
+        $this->provinceSlugService()->apply($this->province()->fresh(), 'jabar');
+        $this->provinceSlugService()->apply(Province::query()->firstWhere('slug', 'jabar'), 'jawa-barat-baru');
+
+        foreach (['jawa-barat', 'jabar'] as $old) {
+            $this->get(route('locations.province', $old))
+                ->assertStatus(301)
+                ->assertRedirect(route('locations.province', 'jawa-barat-baru'));
+        }
+    }
+
+    public function test_a_draft_province_records_no_redirect_when_its_slug_changes(): void
+    {
+        $province = Province::factory()->create(['slug' => 'draft-lama']);
+
+        $this->provinceSlugService()->apply($province, 'draft-baru');
+
+        $this->assertSame(0, LocationProvinceSlugRedirect::query()->count());
     }
 
     // --------------------------------------------------------- collision
@@ -144,11 +264,11 @@ class LocationSlugRedirectTest extends TestCase
         $first = $this->publishedArea('slug-lama');
         $this->slugService()->apply($first, 'slug-baru');
 
-        $second = LocationArea::factory()->create(['slug' => 'wilayah-lain']);
+        $second = LocationArea::factory()->create(['slug' => 'area-lain']);
 
         $this->assertFalse(
             $this->slugService()->isAvailable('slug-lama', $second->getKey()),
-            'Slug lama milik wilayah lain tidak boleh diambil alih.'
+            'Slug lama milik area lain tidak boleh diambil alih.'
         );
     }
 
@@ -172,13 +292,13 @@ class LocationSlugRedirectTest extends TestCase
     {
         $this->publishedArea('cianjur');
 
-        $content = $this->get('/lokasi/cianjur?utm_source=meta&utm_medium=cpc&utm_campaign=lokasi&gclid=abc&fbclid=xyz&filter=Cipanas')
+        $content = $this->get($this->url('cianjur').'?utm_source=meta&utm_medium=cpc&utm_campaign=lokasi&gclid=abc&fbclid=xyz&filter=Cipanas')
             ->assertOk()
             ->getContent();
 
         preg_match('#<link rel="canonical" href="([^"]+)"#', $content, $matches);
 
-        $this->assertSame(route('locations.area', 'cianjur'), $matches[1] ?? null);
+        $this->assertSame($this->url('cianjur'), $matches[1] ?? null);
 
         foreach (['utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'fbclid', 'filter='] as $needle) {
             $this->assertStringNotContainsString($needle, $matches[1] ?? '');
@@ -189,8 +309,8 @@ class LocationSlugRedirectTest extends TestCase
     {
         $this->publishedArea('cianjur');
 
-        $plain = $this->contentRegion($this->get('/lokasi/cianjur')->getContent());
-        $tagged = $this->contentRegion($this->get('/lokasi/cianjur?utm_source=meta&gclid=abc')->getContent());
+        $plain = $this->contentRegion($this->get($this->url('cianjur'))->getContent());
+        $tagged = $this->contentRegion($this->get($this->url('cianjur').'?utm_source=meta&gclid=abc')->getContent());
 
         $this->assertSame($plain, $tagged, 'Parameter iklan tidak boleh mengubah isi halaman.');
     }

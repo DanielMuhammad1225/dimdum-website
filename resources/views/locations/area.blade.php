@@ -15,11 +15,13 @@
                 <span aria-hidden="true" class="px-1">/</span>
                 <a href="{{ route('locations.index') }}" class="inline-flex min-h-11 items-center rounded-pill hover:text-brand-orange">Lokasi</a>
                 <span aria-hidden="true" class="px-1">/</span>
+                <a href="{{ $area['province_url'] }}" class="inline-flex min-h-11 items-center rounded-pill hover:text-brand-orange">{{ $area['province_name'] }}</a>
+                <span aria-hidden="true" class="px-1">/</span>
                 <span aria-current="page" class="font-semibold text-brand-brown">{{ $area['name'] }}</span>
             </nav>
 
             <p class="inline-flex items-center rounded-pill border-2 border-brand-brown/10 bg-white px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-brand-brown/85">
-                Wilayah {{ $area['name'] }}
+                {{ $area['group_name'] }} &middot; {{ $area['province_name'] }}
             </p>
 
             <h1 class="mt-5 max-w-3xl font-display text-4xl font-bold leading-[1.1] text-brand-brown sm:text-5xl">
@@ -42,9 +44,9 @@
     </section>
 
     @if (! empty($area['gallery']))
-        <section class="py-12 sm:py-16" aria-labelledby="galeri-wilayah">
+        <section class="py-12 sm:py-16" aria-labelledby="galeri-area">
             <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-                <h2 id="galeri-wilayah" class="font-display text-2xl font-bold text-brand-brown sm:text-3xl">
+                <h2 id="galeri-area" class="font-display text-2xl font-bold text-brand-brown sm:text-3xl">
                     Suasana Gerobak di {{ $area['name'] }}
                 </h2>
 
@@ -77,37 +79,6 @@
             </h2>
 
             @if (! empty($area['locations']))
-                @if (! empty($area['filters']))
-                    {{-- Filter hanya muncul bila memang ada lebih dari satu
-                         kelompok. Tanpa JavaScript seluruh kartu tetap terlihat
-                         karena penyembunyian dilakukan oleh skrip, bukan CSS. --}}
-                    <div class="mt-6" data-location-filter>
-                        <h3 class="sr-only">Saring berdasarkan area</h3>
-                        <ul class="flex flex-wrap gap-2">
-                            <li>
-                                <button type="button"
-                                        data-filter-value=""
-                                        aria-pressed="true"
-                                        class="inline-flex min-h-11 items-center rounded-pill border-2 border-brand-brown/15 bg-brand-orange px-5 text-sm font-semibold text-brand-brown shadow-sticker aria-pressed:border-brand-brown/30">
-                                    Semua
-                                </button>
-                            </li>
-                            @foreach ($area['filters'] as $filter)
-                                <li>
-                                    <button type="button"
-                                            data-filter-value="{{ $filter }}"
-                                            aria-pressed="false"
-                                            class="inline-flex min-h-11 items-center rounded-pill border-2 border-brand-brown/15 bg-white px-5 text-sm font-semibold text-brand-brown shadow-sticker transition-colors hover:border-brand-brown/30">
-                                        {{ $filter }}
-                                    </button>
-                                </li>
-                            @endforeach
-                        </ul>
-
-                        <p class="mt-3 text-sm text-brand-brown/70" role="status" aria-live="polite" data-filter-status></p>
-                    </div>
-                @endif
-
                 <ul class="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3" data-location-list>
                     @foreach ($area['locations'] as $location)
                         <li class="h-full">
@@ -128,12 +99,12 @@
                     </span>
                     <h3 class="mt-4 font-display text-xl font-bold text-brand-brown">Titik lokasi sedang diperbarui</h3>
                     <p class="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-brand-brown/65">
-                        Daftar gerobak DIMDUM di wilayah {{ $area['name'] }} sedang kami perbarui dan akan tampil kembali di halaman ini.
+                        Daftar gerobak DIMDUM di area {{ $area['name'] }} sedang kami perbarui dan akan tampil kembali di halaman ini.
                     </p>
                     <div class="mt-6 flex flex-wrap justify-center gap-3">
-                        <a href="{{ route('locations.index') }}"
+                        <a href="{{ $area['province_url'] }}"
                            class="inline-flex min-h-11 items-center rounded-pill bg-brand-orange px-6 text-sm font-semibold text-brand-brown shadow-sticker transition-colors hover:bg-brand-orange/90">
-                            Lihat Wilayah Lain
+                            Lihat Area Lain di {{ $area['province_name'] }}
                         </a>
                         <a href="{{ route('home') }}"
                            class="inline-flex min-h-11 items-center rounded-pill border-2 border-brand-brown/15 bg-white px-6 text-sm font-semibold text-brand-brown shadow-sticker transition-colors hover:border-brand-brown/30">

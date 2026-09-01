@@ -12,6 +12,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
+use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
@@ -24,16 +25,31 @@ class LocationAreasTable
         return $table
             ->defaultSort('sort_order')
             ->reorderable('sort_order')
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->withCount([
-                'locations',
-                'locations as visible_locations_count' => fn (Builder $inner) => $inner->publiclyVisible(),
-            ]))
+            // Eager load induk + count: query tidak bertambah per baris.
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query
+                ->with('group.province')
+                ->withCount([
+                    'locations',
+                    'locations as visible_locations_count' => fn (Builder $inner) => $inner->publiclyVisible(),
+                ]))
             ->columns([
                 TextColumn::make('name')
-                    ->label('Wilayah')
+                    ->label('Area')
                     ->searchable()
                     ->sortable()
                     ->weight('bold'),
+
+                TextColumn::make('group.name')
+                    ->label('Kota/Grup')
+                    ->badge()
+                    ->color('gray')
+                    ->sortable(),
+
+                TextColumn::make('group.province.name')
+                    ->label('Provinsi')
+                    ->badge()
+                    ->color('gray')
+                    ->sortable(),
 
                 TextColumn::make('slug')
                     ->label('Slug')
@@ -71,10 +87,13 @@ class LocationAreasTable
                     // membuat Filament menampilkan sel kosong.
                     ->state(fn (LocationArea $record): string => self::publicationLabel($record))
                     ->color(fn (LocationArea $record): string => match (true) {
-                        $record->isPubliclyVisible() => 'success',
+                        $record->isEffectivelyVisible() => 'success',
                         $record->published_at !== null => 'warning',
                         default => 'gray',
-                    }),
+                    })
+                    ->tooltip(fn (LocationArea $record): ?string => $record->isPubliclyVisible() && ! $record->isEffectivelyVisible()
+                        ? 'Area ini sudah terbit, tetapi Kota/Grup atau provinsinya belum tampil sehingga belum terlihat pengunjung.'
+                        : null),
 
                 TextColumn::make('sort_order')
                     ->label('Urutan')
@@ -89,6 +108,12 @@ class LocationAreasTable
                     ->toggleable(),
             ])
             ->filters([
+                SelectFilter::make('location_group_id')
+                    ->label('Kota/Grup')
+                    ->relationship('group', 'name')
+                    ->searchable()
+                    ->preload(),
+
                 TernaryFilter::make('is_active')
                     ->label('Status aktif')
                     ->trueLabel('Aktif')
@@ -113,8 +138,11 @@ class LocationAreasTable
                     ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                     ->color('gray')
                     // Preview hanya untuk halaman yang benar-benar hidup.
-                    ->visible(fn (LocationArea $record): bool => $record->isPubliclyVisible())
-                    ->url(fn (LocationArea $record): string => route('locations.area', $record->slug), shouldOpenInNewTab: true),
+                    ->visible(fn (LocationArea $record): bool => $record->isEffectivelyVisible())
+                    ->url(fn (LocationArea $record): string => route(
+                        'locations.area',
+                        [$record->group->province->slug, $record->slug],
+                    ), shouldOpenInNewTab: true),
 
                 EditAction::make()->label('Ubah'),
 
@@ -125,7 +153,7 @@ class LocationAreasTable
                     ->before(function (LocationArea $record, DeleteAction $action): void {
                         if ($record->locations()->exists()) {
                             $action->failureNotificationTitle(
-                                'Wilayah ini masih memiliki gerobak. Pindahkan atau hapus gerobaknya lebih dulu.'
+                                'Area ini masih memiliki gerobak. Pindahkan atau hapus gerobaknya lebih dulu.'
                             );
                             $action->failure();
                             $action->halt();
@@ -141,8 +169,8 @@ class LocationAreasTable
              | dalam satu klik tanpa pemeriksaan per baris.
              */
             ->toolbarActions([])
-            ->emptyStateHeading('Belum ada wilayah landing')
-            ->emptyStateDescription('Tambahkan wilayah pemasaran lebih dulu, lalu masukkan gerobaknya.');
+            ->emptyStateHeading('Belum ada area')
+            ->emptyStateDescription('Tambahkan Kota/Grup lebih dulu, lalu buat Area di bawahnya.');
     }
 
     protected static function publicationLabel(LocationArea $record): string

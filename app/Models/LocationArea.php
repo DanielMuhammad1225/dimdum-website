@@ -13,9 +13,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
 /**
- * Wilayah landing DIMDUM -- area pemasaran publik, bukan wilayah administratif.
+ * Area -- tingkat ketiga hierarki lokasi, dan induk langsung gerobak.
  *
- * Satu wilayah punya satu slug canonical dan menjadi destination iklan, jadi
+ * Area adalah satuan operasional/pemasaran, bukan selalu kecamatan. Ia berada
+ * di bawah satu Kota/Grup, dan provinsinya diturunkan lewat rantai
+ * Area -> LocationGroup -> Province -- tidak pernah disimpan ulang di sini.
+ *
+ * Halaman Area menjadi destination iklan (/lokasi/{province}/{area}), jadi
  * URL-nya harus tetap hidup meski satu gerobak tutup atau pindah.
  */
 class LocationArea extends Model
@@ -30,11 +34,10 @@ class LocationArea extends Model
      * @var list<string>
      */
     protected $fillable = [
+        'location_group_id',
         'name',
         'headline',
         'description',
-        'province',
-        'city_regency',
         'seo_title',
         'seo_description',
         'is_active',
@@ -57,7 +60,7 @@ class LocationArea extends Model
 
     protected static function booted(): void
     {
-        // Setiap perubahan wilayah membuat seluruh turunan cache lokasi basi.
+        // Setiap perubahan area membuat seluruh turunan cache lokasi basi.
         static::saved(fn () => LocationCatalogService::flushCache());
         static::deleted(fn () => LocationCatalogService::flushCache());
         static::restored(fn () => LocationCatalogService::flushCache());
@@ -65,6 +68,11 @@ class LocationArea extends Model
     }
 
     // --------------------------------------------------------- relationships
+
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(LocationGroup::class, 'location_group_id');
+    }
 
     public function locations(): HasMany
     {
@@ -77,8 +85,8 @@ class LocationArea extends Model
     }
 
     /**
-     * Foto seluruh gerobak di wilayah ini. Dipakai galeri halaman wilayah,
-     * sehingga foto wilayah lain tidak mungkin ikut tercampur.
+     * Foto seluruh gerobak di area ini. Dipakai galeri halaman area,
+     * sehingga foto area lain tidak mungkin ikut tercampur.
      */
     public function images(): HasManyThrough
     {
@@ -95,11 +103,30 @@ class LocationArea extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
+    /**
+     * Provinsi induk, diturunkan lewat Kota/Grup.
+     *
+     * Sengaja BUKAN relationship dan bukan accessor bernama `province`:
+     * memanggilnya tanpa eager load `group.province` akan memicu lazy load,
+     * dan di environment testing Model::preventLazyLoading() menjadikannya
+     * exception -- sehingga N+1 ketahuan di test, bukan di production.
+     */
+    public function parentProvince(): ?Province
+    {
+        return $this->group?->province;
+    }
+
     // ---------------------------------------------------------------- scopes
 
+    /*
+     | Seluruh scope memakai kolom BERKUALIFIKASI (nama tabel disertakan).
+     | location_areas, location_groups, dan provinces sama-sama punya kolom
+     | is_active dan sort_order, sehingga scope tanpa kualifikasi menjadi
+     | ambigu begitu ikut dalam JOIN atau whereHas bertingkat.
+     */
     public function scopeActive(Builder $query): Builder
     {
-        return $query->where('is_active', true);
+        return $query->where($query->qualifyColumn('is_active'), true);
     }
 
     /**
@@ -107,7 +134,9 @@ class LocationArea extends Model
      */
     public function scopePublished(Builder $query): Builder
     {
-        return $query->whereNotNull('published_at')->where('published_at', '<=', now());
+        return $query
+            ->whereNotNull($query->qualifyColumn('published_at'))
+            ->where($query->qualifyColumn('published_at'), '<=', now());
     }
 
     public function scopePubliclyVisible(Builder $query): Builder
@@ -115,9 +144,29 @@ class LocationArea extends Model
         return $query->active()->published();
     }
 
+    /**
+     * Visibilitas EFEKTIF: area baru tampil bila Kota/Grup-nya aktif DAN
+     * provinsinya tampil. Area aktif di bawah provinsi draft tidak boleh
+     * bocor lewat URL mana pun.
+     */
+    public function scopeEffectivelyVisible(Builder $query): Builder
+    {
+        return $query
+            ->publiclyVisible()
+            ->whereHas(
+                'group',
+                fn (Builder $group) => $group
+                    ->active()
+                    ->whereHas('province', fn (Builder $province) => $province->publiclyVisible())
+            );
+    }
+
     public function scopeOrdered(Builder $query): Builder
     {
-        return $query->orderBy('sort_order')->orderBy('name')->orderBy('id');
+        return $query
+            ->orderBy($query->qualifyColumn('sort_order'))
+            ->orderBy($query->qualifyColumn('name'))
+            ->orderBy($query->qualifyColumn('id'));
     }
 
     /**
@@ -131,7 +180,7 @@ class LocationArea extends Model
     // ------------------------------------------------------------ visibility
 
     /**
-     * Visibilitas efektif, dihitung dari state model (bukan query ulang).
+     * Visibilitas area itu sendiri, tanpa memeriksa induk.
      */
     public function isPubliclyVisible(): bool
     {
@@ -143,7 +192,20 @@ class LocationArea extends Model
     }
 
     /**
-     * Pernah terbit? Menentukan apakah perubahan slug wajib mencatat redirect.
+     * Termasuk seluruh rantai induk: Kota/Grup aktif dan provinsi tampil.
+     */
+    public function isEffectivelyVisible(): bool
+    {
+        if (! $this->isPubliclyVisible()) {
+            return false;
+        }
+
+        return $this->group?->isEffectivelyVisible() ?? false;
+    }
+
+    /**
+     * Pernah terbit? Menentukan apakah perubahan slug wajib mencatat redirect
+     * dan apakah perpindahan lintas provinsi boleh ditolak.
      */
     public function hasEverBeenPublished(): bool
     {
@@ -169,6 +231,6 @@ class LocationArea extends Model
 
         return $description !== ''
             ? $description
-            : 'Temukan gerobak DIMDUM yang tersedia di wilayah '.$this->name.'.';
+            : 'Temukan gerobak DIMDUM yang tersedia di area '.$this->name.'.';
     }
 }

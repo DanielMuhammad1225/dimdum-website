@@ -12,6 +12,7 @@ use App\Filament\Resources\Locations\Pages\ListLocations;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationAreaSlugRedirect;
+use App\Models\LocationGroup;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -55,9 +56,9 @@ class LocationAdminResourceTest extends TestCase
 
     public function test_the_area_navigation_group_is_indonesian(): void
     {
-        $html = $this->get('/admin/wilayah-landing')->getContent();
+        $html = $this->get('/admin/area')->getContent();
 
-        foreach (['Lokasi Gerobak', 'Wilayah Landing', 'Gerobak'] as $label) {
+        foreach (['Lokasi Gerobak', 'Provinsi', 'Kota / Grup', 'Area', 'Gerobak'] as $label) {
             $this->assertStringContainsString($label, $html, "Label {$label} tidak ditemukan.");
         }
     }
@@ -67,8 +68,8 @@ class LocationAdminResourceTest extends TestCase
         $html = Livewire::test(CreateLocationArea::class)->html();
 
         foreach ([
-            'Nama wilayah', 'Slug URL', 'Headline halaman', 'Deskripsi wilayah',
-            'Kota/Kabupaten', 'Provinsi', 'Waktu terbit', 'Urutan',
+            'Nama area', 'Slug URL', 'Headline halaman', 'Deskripsi area',
+            'Kota/Grup', 'Provinsi', 'Waktu terbit', 'Urutan',
         ] as $label) {
             $this->assertStringContainsString($label, $html, "Label {$label} tidak ditemukan.");
         }
@@ -79,7 +80,7 @@ class LocationAdminResourceTest extends TestCase
         $html = Livewire::test(CreateLocation::class)->html();
 
         foreach ([
-            'Wilayah landing', 'Nama gerobak', 'Alamat lengkap', 'Kecamatan',
+            'Area', 'Kota/Grup', 'Provinsi', 'Nama gerobak', 'Alamat lengkap', 'Kecamatan',
             'Patokan', 'Jam operasional', 'Latitude', 'Longitude',
         ] as $label) {
             $this->assertStringContainsString($label, $html, "Label {$label} tidak ditemukan.");
@@ -107,7 +108,13 @@ class LocationAdminResourceTest extends TestCase
     public function test_an_invalid_slug_format_is_rejected(): void
     {
         Livewire::test(CreateLocationArea::class)
-            ->fillForm(['name' => 'Cianjur', 'slug' => 'Cianjur Kota!', 'sort_order' => 0])
+            ->fillForm([
+                'province_id' => LocationGroup::factory()->create()->province_id,
+                'location_group_id' => LocationGroup::query()->latest('id')->value('id'),
+                'name' => 'Cianjur',
+                'slug' => 'Cianjur Kota!',
+                'sort_order' => 0,
+            ])
             ->call('create')
             ->assertHasFormErrors(['slug']);
     }
@@ -117,7 +124,13 @@ class LocationAdminResourceTest extends TestCase
         LocationArea::factory()->create(['slug' => 'cianjur']);
 
         Livewire::test(CreateLocationArea::class)
-            ->fillForm(['name' => 'Cianjur Lain', 'slug' => 'cianjur', 'sort_order' => 0])
+            ->fillForm([
+                'province_id' => LocationGroup::factory()->create()->province_id,
+                'location_group_id' => LocationGroup::query()->latest('id')->value('id'),
+                'name' => 'Cianjur Lain',
+                'slug' => 'cianjur',
+                'sort_order' => 0,
+            ])
             ->call('create')
             ->assertHasFormErrors(['slug']);
     }
@@ -162,12 +175,45 @@ class LocationAdminResourceTest extends TestCase
             ->assertHasFormErrors(['whatsapp_number']);
     }
 
+    /**
+     * URL publik area kini dua segmen. Slug provinsinya dibaca dari rantai
+     * induk sebenarnya, bukan ditulis ulang di setiap test.
+     */
+    private function areaUrl(string $areaSlug): string
+    {
+        $area = LocationArea::withTrashed()
+            ->where('slug', $areaSlug)
+            ->firstOrFail()
+            ->load('group.province');
+
+        return route('locations.area', [$area->group->province->slug, $areaSlug]);
+    }
+
+    /** URL area memakai slug provinsi yang sama, tetapi slug area lain. */
+    private function areaUrlWithSlug(string $knownAreaSlug, string $otherAreaSlug): string
+    {
+        $area = LocationArea::withTrashed()
+            ->where('slug', $knownAreaSlug)
+            ->firstOrFail()
+            ->load('group.province');
+
+        return route('locations.area', [$area->group->province->slug, $otherAreaSlug]);
+    }
+
     // ------------------------------------------------------ draft & publish
 
     public function test_an_area_is_created_as_a_draft_by_default(): void
     {
+        $group = LocationGroup::factory()->create();
+
         Livewire::test(CreateLocationArea::class)
-            ->fillForm(['name' => 'Cianjur', 'slug' => 'cianjur', 'sort_order' => 0])
+            ->fillForm([
+                'province_id' => $group->province_id,
+                'location_group_id' => $group->getKey(),
+                'name' => 'Cianjur',
+                'slug' => 'cianjur',
+                'sort_order' => 0,
+            ])
             ->call('create')
             ->assertHasNoFormErrors();
 
@@ -178,7 +224,7 @@ class LocationAdminResourceTest extends TestCase
         $this->assertFalse($area->isPubliclyVisible());
 
         // Draft tidak boleh bocor ke publik.
-        $this->get('/lokasi/cianjur')->assertNotFound();
+        $this->get($this->areaUrl('cianjur'))->assertNotFound();
     }
 
     public function test_publishing_an_area_makes_it_reachable(): void
@@ -191,15 +237,23 @@ class LocationAdminResourceTest extends TestCase
             ->call('save')
             ->assertHasNoFormErrors();
 
-        $this->get('/lokasi/cianjur')->assertOk();
+        $this->get($this->areaUrl('cianjur'))->assertOk();
     }
 
     public function test_the_creator_and_editor_are_recorded(): void
     {
         $userId = auth()->id();
 
+        $group = LocationGroup::factory()->create();
+
         Livewire::test(CreateLocationArea::class)
-            ->fillForm(['name' => 'Cianjur', 'slug' => 'cianjur', 'sort_order' => 0])
+            ->fillForm([
+                'province_id' => $group->province_id,
+                'location_group_id' => $group->getKey(),
+                'name' => 'Cianjur',
+                'slug' => 'cianjur',
+                'sort_order' => 0,
+            ])
             ->call('create')
             ->assertHasNoFormErrors();
 
@@ -228,8 +282,8 @@ class LocationAdminResourceTest extends TestCase
             'Slug lama harus tercatat sebagai redirect.'
         );
 
-        $this->get('/lokasi/cianjur')->assertStatus(301);
-        $this->get('/lokasi/cianjur-kota')->assertOk();
+        $this->get($this->areaUrlWithSlug('cianjur-kota', 'cianjur'))->assertStatus(301);
+        $this->get($this->areaUrl('cianjur-kota'))->assertOk();
     }
 
     public function test_the_slug_field_warns_when_the_page_has_been_published(): void
@@ -300,7 +354,7 @@ class LocationAdminResourceTest extends TestCase
             ->assertNotified();
 
         // Halaman tetap hidup, tapi isinya empty state.
-        $this->get('/lokasi/kuningan')
+        $this->get($this->areaUrl('kuningan'))
             ->assertOk()
             ->assertSee('Titik lokasi sedang diperbarui', false);
     }
@@ -353,7 +407,7 @@ class LocationAdminResourceTest extends TestCase
             ->assertTableColumnStateSet('publication_status', 'Tampil', $shown)
             // Gerobak terbit di bawah wilayah yang belum terbit: dijelaskan,
             // bukan dibiarkan tampak seolah sudah tayang.
-            ->assertTableColumnStateSet('publication_status', 'Wilayah belum terbit', $orphan);
+            ->assertTableColumnStateSet('publication_status', 'Induk belum tampil', $orphan);
     }
 
     public function test_the_area_table_can_be_searched_and_filtered(): void
@@ -422,16 +476,16 @@ class LocationAdminResourceTest extends TestCase
         $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
         $location = Location::factory()->for($area, 'area')->published()->create(['name' => 'Gerobak Uji Hapus']);
 
-        $this->get('/lokasi/cianjur')->assertSee('Gerobak Uji Hapus', false);
+        $this->get($this->areaUrl('cianjur'))->assertSee('Gerobak Uji Hapus', false);
 
         $location->delete();
 
-        $this->get('/lokasi/cianjur')->assertDontSee('Gerobak Uji Hapus', false);
+        $this->get($this->areaUrl('cianjur'))->assertDontSee('Gerobak Uji Hapus', false);
         $this->assertSoftDeleted($location);
 
         $location->restore();
 
-        $this->get('/lokasi/cianjur')->assertSee('Gerobak Uji Hapus', false);
+        $this->get($this->areaUrl('cianjur'))->assertSee('Gerobak Uji Hapus', false);
     }
 
     // --------------------------------------------------------- reorder

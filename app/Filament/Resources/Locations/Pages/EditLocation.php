@@ -23,15 +23,54 @@ class EditLocation extends EditRecord
         return 'Ubah Gerobak';
     }
 
+    /**
+     * Dua select bantu (provinsi & Kota/Grup) tidak tersimpan di tabel, jadi
+     * diisi ulang dari rantai induk sebenarnya setiap kali form dibuka.
+     */
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        /** @var Location $record */
+        $record = $this->getRecord();
+        $record->loadMissing('area.group');
+
+        $group = $record->area?->group;
+
+        $data['location_group_id'] = $group?->getKey();
+        $data['province_id'] = $group?->province_id;
+
+        return $data;
+    }
+
+    /**
+     * URL halaman Area induk, atau null bila rantainya belum tampil.
+     */
+    protected static function areaUrl(Location $record): ?string
+    {
+        $record->loadMissing('area.group.province');
+        $area = $record->area;
+
+        if ($area === null || ! $area->isEffectivelyVisible()) {
+            return null;
+        }
+
+        $province = $area->group?->province;
+
+        return $province === null
+            ? null
+            : route('locations.area', [$province->slug, $area->slug]);
+    }
+
     protected function getHeaderActions(): array
     {
         return [
             Action::make('preview')
-                ->label('Lihat wilayah')
+                ->label('Lihat halaman area')
                 ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
                 ->color('gray')
-                ->visible(fn (Location $record): bool => $record->area?->isPubliclyVisible() ?? false)
-                ->url(fn (Location $record): string => route('locations.area', $record->area->slug), shouldOpenInNewTab: true),
+                // Halaman detail gerobak belum ada, jadi preview mengarah ke
+                // halaman Area induknya.
+                ->visible(fn (Location $record): bool => self::areaUrl($record) !== null)
+                ->url(fn (Location $record): string => (string) self::areaUrl($record), shouldOpenInNewTab: true),
 
             DeleteAction::make()->label('Hapus'),
             RestoreAction::make()->label('Pulihkan'),

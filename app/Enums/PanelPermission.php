@@ -21,6 +21,8 @@ enum PanelPermission: string
     case CreateLocations = 'create_locations';
     case UpdateLocations = 'update_locations';
     case DeleteLocations = 'delete_locations';
+    case ManageLocationProvinces = 'manage_location_provinces';
+    case ManageLocationGroups = 'manage_location_groups';
     case ManageLocationAreas = 'manage_location_areas';
     case PublishLocations = 'publish_locations';
     case ChangeLocationSlugs = 'change_location_slugs';
@@ -39,7 +41,9 @@ enum PanelPermission: string
             self::CreateLocations => 'Tambah Gerobak',
             self::UpdateLocations => 'Ubah Gerobak',
             self::DeleteLocations => 'Hapus Lokasi',
-            self::ManageLocationAreas => 'Kelola Wilayah Landing',
+            self::ManageLocationProvinces => 'Kelola Provinsi',
+            self::ManageLocationGroups => 'Kelola Kota/Grup',
+            self::ManageLocationAreas => 'Kelola Area',
             self::PublishLocations => 'Terbitkan Lokasi',
             self::ChangeLocationSlugs => 'Ubah Slug Lokasi',
             self::ManageLocationMedia => 'Kelola Foto Gerobak',
@@ -59,6 +63,8 @@ enum PanelPermission: string
             self::CreateLocations,
             self::UpdateLocations,
             self::DeleteLocations,
+            self::ManageLocationProvinces,
+            self::ManageLocationGroups,
             self::ManageLocationAreas,
             self::PublishLocations,
             self::ChangeLocationSlugs,

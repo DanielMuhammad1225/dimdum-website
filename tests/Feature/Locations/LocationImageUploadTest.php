@@ -23,6 +23,20 @@ class LocationImageUploadTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * URL publik area kini dua segmen; slug provinsinya dibaca dari rantai
+     * induk sebenarnya.
+     */
+    private function areaUrl(string $areaSlug): string
+    {
+        $area = LocationArea::withTrashed()
+            ->where('slug', $areaSlug)
+            ->firstOrFail()
+            ->load('group.province');
+
+        return route('locations.area', [$area->group->province->slug, $areaSlug]);
+    }
+
     protected LocationArea $area;
 
     protected Location $location;
@@ -234,7 +248,7 @@ class LocationImageUploadTest extends TestCase
 
         $path = $this->location->images()->firstOrFail()->image_path;
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringContainsString('storage/'.$path, $content);
         $this->assertStringContainsString('width="1280"', $content);
@@ -249,7 +263,7 @@ class LocationImageUploadTest extends TestCase
         $this->save([$this->imageRow(UploadedFile::fake()->image('foto.jpg', 1280, 720))])
             ->assertHasNoFormErrors();
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         preg_match_all('/<img\s[^>]*>/i', $content, $matches);
 
@@ -319,7 +333,7 @@ class LocationImageUploadTest extends TestCase
 
         Storage::disk('public')->assertExists($path);
 
-        $this->get('/lokasi/cianjur')
+        $this->get($this->areaUrl('cianjur'))
             ->assertOk()
             ->assertSee('storage/'.$path, false);
     }
@@ -405,7 +419,7 @@ class LocationImageUploadTest extends TestCase
             'image_path' => 'locations/hilang/tidak-ada.jpg',
         ]);
 
-        $content = $this->get('/lokasi/cianjur')->getContent();
+        $content = $this->get($this->areaUrl('cianjur'))->getContent();
 
         $this->assertStringNotContainsString('tidak-ada.jpg', $content);
         $this->assertStringNotContainsString('src=""', $content);
