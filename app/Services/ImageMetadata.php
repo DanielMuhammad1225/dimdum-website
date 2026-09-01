@@ -22,6 +22,58 @@ class ImageMetadata
     ];
 
     /**
+     * Baca metadata nyata sebuah file gambar pada disk 'public'.
+     *
+     * Dipakai saat menyimpan foto gerobak: width/height/mime/size diambil
+     * dari file yang benar-benar tersimpan, bukan dari yang dikirim browser.
+     *
+     * @return array{width: int, height: int, mime_type: string, size_bytes: int}|null
+     */
+    public static function inspect(mixed $path): ?array
+    {
+        if (! is_string($path)) {
+            return null;
+        }
+
+        $path = ltrim(trim($path), '/');
+
+        if ($path === '' || str_contains($path, '..')) {
+            return null;
+        }
+
+        $disk = Storage::disk('public');
+
+        if (! $disk->exists($path)) {
+            return null;
+        }
+
+        $size = @getimagesize($disk->path($path));
+
+        if ($size === false || ! isset($size[0], $size[1]) || $size[0] < 1 || $size[1] < 1) {
+            return null;
+        }
+
+        $mime = $size['mime'] ?? null;
+
+        // MIME hasil deteksi isi file, bukan dari nama atau header kiriman.
+        if (! is_string($mime) || ! in_array($mime, self::MIME_BY_EXTENSION, true)) {
+            $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+            $mime = self::MIME_BY_EXTENSION[$extension] ?? null;
+        }
+
+        if (! is_string($mime)) {
+            return null;
+        }
+
+        return [
+            'width' => (int) $size[0],
+            'height' => (int) $size[1],
+            'mime_type' => $mime,
+            'size_bytes' => (int) $disk->size($path),
+        ];
+    }
+
+    /**
      * Ubah path relatif pada disk 'public' menjadi kontrak gambar yang
      * dipahami Blade: ['src', 'width', 'height', 'type', 'alt'].
      *

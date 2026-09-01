@@ -33,6 +33,13 @@ class UploadedImage
     public const OG_DIRECTORY = 'site/og';
 
     /**
+     * Akar direktori foto gerobak. Setiap gerobak mendapat subfolder sendiri
+     * (locations/{ulid}/) supaya penghapusan tidak pernah menyentuh data
+     * gerobak lain.
+     */
+    public const LOCATION_ROOT_DIRECTORY = 'locations';
+
+    /**
      * MIME type yang diterima, sekaligus ekstensi resmi untuk masing-masing.
      */
     protected const EXTENSION_BY_MIME = [
@@ -50,6 +57,7 @@ class UploadedImage
     protected const MANAGED_DIRECTORIES = [
         self::HERO_DIRECTORY,
         self::OG_DIRECTORY,
+        self::LOCATION_ROOT_DIRECTORY,
     ];
 
     public static function make(string $name, string $directory): FileUpload
@@ -90,6 +98,35 @@ class UploadedImage
     }
 
     /**
+     * Komponen upload untuk galeri satu gerobak.
+     *
+     * Direktori per gerobak dibuat dari ULID, bukan dari nama atau slug yang
+     * bisa diubah admin, sehingga path tidak pernah berpindah.
+     */
+    public static function locationGallery(string $name, string $directory): FileUpload
+    {
+        return self::make($name, $directory)
+            ->label('Foto gerobak')
+            ->helperText('JPG, PNG, atau WebP. Maksimal 3 MB per foto.')
+            // TIDAK memakai imageEditor: foto gerobak jangan dipotong.
+            ->imagePreviewHeight('120');
+    }
+
+    /**
+     * Direktori penyimpanan foto untuk satu gerobak.
+     */
+    public static function locationDirectory(string $token): string
+    {
+        $token = preg_replace('/[^A-Za-z0-9]/', '', $token) ?? '';
+
+        if ($token === '') {
+            $token = (string) Str::ulid();
+        }
+
+        return self::LOCATION_ROOT_DIRECTORY.'/'.$token;
+    }
+
+    /**
      * Nama file akhir: ULID + ekstensi dari MIME hasil deteksi server.
      *
      * Bila MIME-nya di luar allowlist, ekstensi 'bin' dipakai supaya file
@@ -98,9 +135,37 @@ class UploadedImage
      */
     public static function safeFileName(TemporaryUploadedFile $file): string
     {
-        $mime = strtolower((string) $file->getMimeType());
+        return Str::ulid().'.'.self::extensionFor($file);
+    }
 
-        return Str::ulid().'.'.(self::EXTENSION_BY_MIME[$mime] ?? 'bin');
+    /**
+     * Ekstensi yang benar-benar cocok dengan ISI berkas.
+     *
+     * getimagesize() membaca byte header, sehingga tipe yang dilaporkan
+     * browser tidak menentukan apa pun. Ini penting agar ekstensi file dan
+     * kolom mime_type tidak pernah saling bertentangan: berkas PNG yang
+     * dikirim dengan header "image/jpeg" tetap tersimpan sebagai .png.
+     *
+     * MIME kiriman hanya dipakai bila isi berkas tidak terbaca sama sekali,
+     * dan bila keduanya gagal ekstensinya menjadi 'bin' -- tidak dapat
+     * dieksekusi maupun dirender sebagai gambar.
+     */
+    protected static function extensionFor(TemporaryUploadedFile $file): string
+    {
+        $path = $file->getRealPath();
+
+        if (is_string($path) && $path !== '') {
+            $size = @getimagesize($path);
+            $detected = is_array($size) ? strtolower((string) ($size['mime'] ?? '')) : '';
+
+            if (isset(self::EXTENSION_BY_MIME[$detected])) {
+                return self::EXTENSION_BY_MIME[$detected];
+            }
+        }
+
+        $reported = strtolower((string) $file->getMimeType());
+
+        return self::EXTENSION_BY_MIME[$reported] ?? 'bin';
     }
 
     /**
@@ -129,6 +194,50 @@ class UploadedImage
         if ($disk->exists($previousPath)) {
             $disk->delete($previousPath);
         }
+    }
+
+    /**
+     * Hapus satu file terkelola. Path di luar direktori modul diabaikan
+     * diam-diam, sehingga aset brand di public/images/brand -- yang bahkan
+     * tidak berada di disk ini -- tidak mungkin ikut terhapus.
+     */
+    public static function deleteManagedFile(?string $path): bool
+    {
+        $path = is_string($path) ? trim($path) : '';
+
+        if ($path === '' || ! self::isManagedPath($path)) {
+            return false;
+        }
+
+        $disk = Storage::disk(self::DISK);
+
+        if (! $disk->exists($path)) {
+            return false;
+        }
+
+        return $disk->delete($path);
+    }
+
+    /**
+     * Hapus seluruh direktori milik satu gerobak. Dipakai hanya saat force
+     * delete, dan hanya untuk direktori di bawah locations/.
+     */
+    public static function deleteManagedDirectory(?string $directory): bool
+    {
+        $directory = is_string($directory) ? trim(ltrim($directory, '/')) : '';
+
+        if ($directory === '' || str_contains($directory, '..')) {
+            return false;
+        }
+
+        // Wajib berupa subfolder gerobak, bukan akar locations/ itu sendiri.
+        if (! str_starts_with($directory, self::LOCATION_ROOT_DIRECTORY.'/')) {
+            return false;
+        }
+
+        $disk = Storage::disk(self::DISK);
+
+        return $disk->directoryExists($directory) && $disk->deleteDirectory($directory);
     }
 
     public static function isManagedPath(string $path): bool

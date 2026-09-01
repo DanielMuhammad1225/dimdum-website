@@ -37,6 +37,9 @@
 
     {{ Vite::fonts() }}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
+
+    {{-- Structured data dan meta tambahan per halaman. Kosong di homepage. --}}
+    @stack('head')
 </head>
 <body class="min-h-dvh bg-brand-cream-soft font-sans text-brand-brown antialiased">
     <a href="#konten-utama"

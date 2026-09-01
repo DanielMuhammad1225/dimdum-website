@@ -280,9 +280,9 @@ class PublicHomepageFromDatabaseTest extends TestCase
         $this->get('/')->assertOk();
 
         $this->assertLessThanOrEqual(
-            2,
+            3,
             count($queries),
-            'Homepage hanya boleh satu query site settings dan satu query homepage settings: '.implode(' | ', $queries),
+            'Homepage hanya boleh query site settings, homepage settings, dan daftar wilayah: '.implode(' | ', $queries),
         );
     }
 

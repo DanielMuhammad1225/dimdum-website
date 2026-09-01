@@ -47,7 +47,13 @@ class RolesAndPermissionsSeederTest extends TestCase
         $this->assertSame(count(PanelPermission::cases()), Permission::count(), 'Permission tidak boleh terduplikasi.');
 
         $admin = Role::findByName(UserRole::Admin->value);
-        $this->assertCount(3, $admin->permissions, 'Permission role tidak boleh terduplikasi.');
+        // Jumlahnya diturunkan dari enum, bukan angka tetap, supaya test
+        // tidak perlu disentuh setiap kali modul baru menambah permission.
+        $this->assertCount(
+            count(UserRole::Admin->defaultPermissions()),
+            $admin->permissions,
+            'Permission role tidak boleh terduplikasi.'
+        );
     }
 
     public function test_it_never_removes_existing_role_assignments(): void

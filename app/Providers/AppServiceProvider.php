@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Enums\UserRole;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -32,6 +33,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->registerAuthorizationGate();
+
+        /*
+         | Deteksi N+1 saat test: relasi yang dipakai tanpa eager loading
+         | melempar exception, sehingga query yang bertambah per gerobak
+         | ketahuan di CI, bukan di production.
+         |
+         | Hanya di environment testing. Mengaktifkannya di local akan
+         | menghentikan admin panel pada jalur lazy load internal Filament
+         | yang bukan wewenang kita.
+         */
+        Model::preventLazyLoading($this->app->environment('testing'));
     }
 
     /**

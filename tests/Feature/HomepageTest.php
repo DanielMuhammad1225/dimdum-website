@@ -122,10 +122,13 @@ class HomepageTest extends TestCase
 
         $this->get('/')->assertOk();
 
-        // Satu query site settings + satu query homepage settings.
-        // Tidak boleh ada query per section atau per komponen Blade.
+        /*
+         | Tiga query tetap: site settings, homepage settings, dan daftar
+         | wilayah lokasi. Jumlahnya KONSTAN -- tidak bertambah per section,
+         | per komponen Blade, maupun per wilayah/gerobak.
+         */
         $this->assertLessThanOrEqual(
-            2,
+            3,
             count($queries),
             'Homepage melakukan query berlebih: '.implode(' | ', $queries),
         );

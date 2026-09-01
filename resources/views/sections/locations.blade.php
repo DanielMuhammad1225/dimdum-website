@@ -1,21 +1,47 @@
 @php($locations = $homepage['locations'])
 
+{{--
+    Judul dan deskripsi section tetap dikelola Homepage CMS.
+    Daftar wilayahnya berasal dari database lewat LocationCatalogService dan
+    sudah di-resolve controller -- tidak ada query di Blade dan tidak ada nama
+    wilayah yang ditulis di config.
+--}}
 <section id="{{ $locations['id'] }}" class="bg-brand-cream py-14 sm:py-20">
     <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <x-section-heading :title="$locations['title']" :description="$locations['description']" />
 
-        <div class="mx-auto mt-10 max-w-2xl">
-            @if ($brand['locations']['available'] && ! empty($brand['locations']['items']))
-                <ul class="grid gap-4 sm:grid-cols-2">
-                    @foreach ($brand['locations']['items'] as $location)
-                        <li class="rounded-card border-2 border-brand-brown/10 bg-white p-6 shadow-sticker">
-                            <h3 class="font-display text-lg font-bold text-brand-brown">{{ $location['name'] }}</h3>
-                            <p class="mt-1 text-sm leading-relaxed text-brand-brown/70">{{ $location['address'] }}</p>
-                        </li>
-                    @endforeach
-                </ul>
-            @else
-                {{-- Data lokasi belum tersedia: tampilkan empty state, bukan alamat karangan. --}}
+        @if (! empty($locationAreas))
+            <ul class="mx-auto mt-10 grid max-w-4xl gap-4 sm:grid-cols-2">
+                @foreach ($locationAreas as $area)
+                    <li>
+                        <a href="{{ $area['url'] }}"
+                           class="flex h-full flex-col rounded-card border-2 border-brand-brown/10 bg-white p-6 shadow-sticker transition-transform duration-150 ease-out hover:-translate-y-0.5 hover:border-brand-brown/25">
+                            <h3 class="font-display text-lg font-bold text-brand-brown">{{ $area['name'] }}</h3>
+
+                            @if (! empty($area['city_regency']) || ! empty($area['province']))
+                                <p class="mt-1 text-sm text-brand-brown/60">
+                                    {{ collect([$area['city_regency'] ?? null, $area['province'] ?? null])->filter()->implode(', ') }}
+                                </p>
+                            @endif
+
+                            <span class="mt-4 inline-flex w-fit items-center rounded-pill bg-brand-cream px-4 py-1.5 text-xs font-semibold text-brand-brown">
+                                {{ $area['location_count'] }} titik gerobak
+                            </span>
+                        </a>
+                    </li>
+                @endforeach
+            </ul>
+
+            <p class="mt-8 text-center">
+                <a href="{{ route('locations.index') }}"
+                   class="inline-flex min-h-11 items-center rounded-pill bg-brand-orange px-6 py-3.5 text-sm font-semibold text-brand-brown shadow-sticker-lg transition-transform duration-150 ease-out hover:-translate-y-0.5 sm:text-base">
+                    Lihat Semua Wilayah
+                </a>
+            </p>
+        @else
+            {{-- Belum ada wilayah yang terbit: empty state dari Homepage CMS,
+                 bukan alamat karangan. --}}
+            <div class="mx-auto mt-10 max-w-2xl">
                 <div class="rounded-card border-2 border-dashed border-brand-brown/20 bg-white px-6 py-12 text-center shadow-sticker">
                     <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-pill bg-brand-yellow/40" aria-hidden="true">
                         <svg class="h-6 w-6 text-brand-brown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -28,7 +54,7 @@
                         {{ $locations['coming_soon_description'] }}
                     </p>
                 </div>
-            @endif
-        </div>
+            </div>
+        @endif
     </div>
 </section>

@@ -40,17 +40,30 @@ enum UserRole: string
             self::SuperAdmin => PanelPermission::cases(),
 
             // manage_users sengaja BELUM diberikan ke Admin sampai aturan
-            // User Management dibuat pada fase berikutnya.
+            // User Management dibuat pada fase berikutnya. Seluruh permission
+            // modul lokasi diberikan penuh.
             self::Admin => [
                 PanelPermission::AccessAdminPanel,
                 PanelPermission::ManageSiteSettings,
                 PanelPermission::ManageHomepage,
+                ...PanelPermission::locationCases(),
             ],
 
-            // Operator belum punya permission konten karena resource-nya
-            // memang belum ada.
+            /*
+             | Operator bekerja pada data gerobak sehari-hari: melihat,
+             | membuat draft, memperbarui informasi, dan mengelola foto.
+             |
+             | SENGAJA TIDAK diberikan: manage_location_areas, publish_locations,
+             | change_location_slugs, dan delete_locations. Keempatnya mengubah
+             | URL publik atau menghapus data, jadi tetap menjadi kewenangan
+             | Admin dan Super Admin.
+             */
             self::Operator => [
                 PanelPermission::AccessAdminPanel,
+                PanelPermission::ViewLocations,
+                PanelPermission::CreateLocations,
+                PanelPermission::UpdateLocations,
+                PanelPermission::ManageLocationMedia,
             ],
         };
     }
