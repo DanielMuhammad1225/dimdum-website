@@ -11,11 +11,12 @@ use App\Filament\Resources\Locations\Pages\EditLocation;
 use App\Filament\Resources\Locations\Pages\ListLocations;
 use App\Models\Location;
 use App\Models\LocationArea;
-use App\Models\LocationAreaSlugRedirect;
 use App\Models\LocationGroup;
+use App\Models\LocationPage;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -67,11 +68,20 @@ class LocationAdminResourceTest extends TestCase
     {
         $html = Livewire::test(CreateLocationArea::class)->html();
 
-        foreach ([
-            'Nama area', 'Slug URL', 'Headline halaman', 'Deskripsi area',
-            'Kota/Grup', 'Provinsi', 'Waktu terbit',
-        ] as $label) {
+        foreach (['Nama area', 'Kota/Grup', 'Provinsi', 'Aktif'] as $label) {
             $this->assertStringContainsString($label, $html, "Label {$label} tidak ditemukan.");
+        }
+    }
+
+    /**
+     * Area adalah master data: tidak ada satu pun field halaman publik.
+     */
+    public function test_the_area_form_has_no_public_page_field(): void
+    {
+        $html = Livewire::test(CreateLocationArea::class)->html();
+
+        foreach (['Slug URL', 'Headline halaman', 'SEO title', 'Waktu terbit'] as $label) {
+            $this->assertStringNotContainsString($label, $html, "Field {$label} seharusnya sudah pindah ke Halaman Slug Lokasi.");
         }
     }
 
@@ -93,9 +103,9 @@ class LocationAdminResourceTest extends TestCase
     {
         // sort_order tidak lagi diminta dari pengguna -- server yang menghitung.
         Livewire::test(CreateLocationArea::class)
-            ->fillForm(['name' => '', 'slug' => '', 'location_group_id' => null])
+            ->fillForm(['name' => '', 'location_group_id' => null])
             ->call('create')
-            ->assertHasFormErrors(['name', 'slug', 'location_group_id']);
+            ->assertHasFormErrors(['name', 'location_group_id']);
     }
 
     public function test_required_location_fields_are_enforced(): void
@@ -106,34 +116,41 @@ class LocationAdminResourceTest extends TestCase
             ->assertHasFormErrors(['location_area_id', 'name', 'full_address']);
     }
 
-    public function test_an_invalid_slug_format_is_rejected(): void
+    public function test_an_area_no_longer_accepts_a_slug(): void
     {
+        $group = LocationGroup::factory()->create();
+
         Livewire::test(CreateLocationArea::class)
             ->fillForm([
-                'province_id' => LocationGroup::factory()->create()->province_id,
-                'location_group_id' => LocationGroup::query()->latest('id')->value('id'),
+                'province_id' => $group->province_id,
+                'location_group_id' => $group->getKey(),
                 'name' => 'Cianjur',
-                'slug' => 'Cianjur Kota!',
-                'sort_order' => 0,
             ])
             ->call('create')
-            ->assertHasFormErrors(['slug']);
+            ->assertHasNoFormErrors();
+
+        $this->assertFalse(
+            Schema::hasColumn('location_areas', 'slug'),
+            'Area tidak boleh lagi menyimpan slug.',
+        );
     }
 
-    public function test_a_duplicate_slug_is_rejected(): void
+    public function test_two_areas_may_share_the_same_name(): void
     {
-        LocationArea::factory()->create(['slug' => 'cianjur']);
+        $group = LocationGroup::factory()->create();
+        LocationArea::factory()->for($group, 'group')->create(['name' => 'Cianjur']);
 
+        // Tanpa slug, nama yang sama tidak lagi menimbulkan bentrok apa pun.
         Livewire::test(CreateLocationArea::class)
             ->fillForm([
-                'province_id' => LocationGroup::factory()->create()->province_id,
-                'location_group_id' => LocationGroup::query()->latest('id')->value('id'),
-                'name' => 'Cianjur Lain',
-                'slug' => 'cianjur',
-                'sort_order' => 0,
+                'province_id' => $group->province_id,
+                'location_group_id' => $group->getKey(),
+                'name' => 'Cianjur',
             ])
             ->call('create')
-            ->assertHasFormErrors(['slug']);
+            ->assertHasNoFormErrors();
+
+        $this->assertSame(2, LocationArea::query()->where('name', 'Cianjur')->count());
     }
 
     public function test_an_unsafe_maps_url_is_rejected(): void
@@ -203,42 +220,50 @@ class LocationAdminResourceTest extends TestCase
 
     // ------------------------------------------------------ draft & publish
 
-    public function test_an_area_is_created_as_a_draft_by_default(): void
+    public function test_an_area_is_created_active_and_placed_last(): void
     {
         $group = LocationGroup::factory()->create();
+        LocationArea::factory()->for($group, 'group')->create(['sort_order' => 1]);
 
         Livewire::test(CreateLocationArea::class)
             ->fillForm([
                 'province_id' => $group->province_id,
                 'location_group_id' => $group->getKey(),
                 'name' => 'Cianjur',
-                'slug' => 'cianjur',
-                'sort_order' => 0,
+                'is_active' => true,
             ])
             ->call('create')
             ->assertHasNoFormErrors();
 
-        $area = LocationArea::query()->firstOrFail();
+        $area = LocationArea::query()->where('name', 'Cianjur')->firstOrFail();
 
-        $this->assertSame('cianjur', $area->slug);
-        $this->assertNull($area->published_at, 'Tanpa waktu terbit = draft.');
-        $this->assertFalse($area->isPubliclyVisible());
-
-        // Draft tidak boleh bocor ke publik.
-        $this->get($this->areaUrl('cianjur'))->assertNotFound();
+        $this->assertTrue($area->is_active);
+        $this->assertSame(2, (int) $area->sort_order, 'Record baru ditempatkan di posisi terakhir.');
     }
 
-    public function test_publishing_an_area_makes_it_reachable(): void
+    /**
+     * Area tidak punya URL sendiri. Yang bisa dijangkau publik adalah Halaman
+     * Slug Lokasi yang memilih gerobak di bawah Area itu.
+     */
+    public function test_an_active_area_feeds_a_public_page(): void
     {
-        $area = LocationArea::factory()->create(['slug' => 'cianjur', 'name' => 'Cianjur']);
-        Location::factory()->for($area, 'area')->published()->create();
+        $area = LocationArea::factory()->create(['name' => 'Cianjur']);
+        $location = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Cianjur']);
 
-        Livewire::test(EditLocationArea::class, ['record' => $area->getRouteKey()])
-            ->fillForm(['is_active' => true, 'published_at' => now()->subMinute()])
-            ->call('save')
-            ->assertHasNoFormErrors();
+        $page = LocationPage::factory()->published()->create();
+        $page->groups()->attach($area->location_group_id);
+        $page->locations()->attach($location);
 
-        $this->get($this->areaUrl('cianjur'))->assertOk();
+        $this->get(route('location-pages.show', $page->slug))
+            ->assertOk()
+            ->assertSee('Gerobak Cianjur');
+
+        // Menonaktifkan Area menghentikan gerobaknya tampil.
+        $area->forceFill(['is_active' => false])->save();
+
+        $this->get(route('location-pages.show', $page->slug))
+            ->assertOk()
+            ->assertDontSee('Gerobak Cianjur');
     }
 
     public function test_the_creator_and_editor_are_recorded(): void
@@ -266,107 +291,72 @@ class LocationAdminResourceTest extends TestCase
 
     // ---------------------------------------------------- slug & redirect
 
-    public function test_changing_a_published_slug_records_a_redirect(): void
+    /**
+     * Slug tidak lagi ada di master hierarki. Yang tersisa untuk diperiksa:
+     * form Area dan Gerobak benar-benar tidak menerima slug dari mana pun.
+     */
+    public function test_the_hierarchy_forms_never_accept_a_slug(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur', 'name' => 'Cianjur']);
-        Location::factory()->for($area, 'area')->published()->create();
+        $area = LocationArea::factory()->create();
+        $location = Location::factory()->for($area, 'area')->create();
 
-        Livewire::test(EditLocationArea::class, ['record' => $area->getRouteKey()])
-            ->fillForm(['slug' => 'cianjur-kota'])
-            ->call('save')
-            ->assertHasNoFormErrors();
+        foreach ([
+            [EditLocationArea::class, $area->getRouteKey()],
+            [EditLocation::class, $location->getRouteKey()],
+        ] as [$page, $key]) {
+            $html = Livewire::test($page, ['record' => $key])->html();
 
-        $this->assertSame('cianjur-kota', $area->fresh()->slug);
-
-        $this->assertTrue(
-            LocationAreaSlugRedirect::query()->where('old_slug', 'cianjur')->exists(),
-            'Slug lama harus tercatat sebagai redirect.'
-        );
-
-        $this->get($this->areaUrlWithSlug('cianjur-kota', 'cianjur'))->assertStatus(301);
-        $this->get($this->areaUrl('cianjur-kota'))->assertOk();
+            $this->assertStringNotContainsString('Slug URL', $html);
+            $this->assertStringNotContainsString('PERINGATAN', $html);
+        }
     }
 
-    public function test_the_slug_field_warns_when_the_page_has_been_published(): void
+    public function test_operator_cannot_change_a_location_active_state(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
-
-        $html = Livewire::test(EditLocationArea::class, ['record' => $area->getRouteKey()])->html();
-
-        $this->assertStringContainsString('PERINGATAN', $html);
-        $this->assertStringContainsString('sudah pernah terbit', $html);
-    }
-
-    public function test_a_draft_slug_field_shows_no_warning(): void
-    {
-        $area = LocationArea::factory()->create(['slug' => 'cianjur']);
-
-        $html = Livewire::test(EditLocationArea::class, ['record' => $area->getRouteKey()])->html();
-
-        $this->assertStringNotContainsString('PERINGATAN', $html);
-    }
-
-    public function test_operator_cannot_submit_a_slug_change(): void
-    {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
-        $location = Location::factory()->for($area, 'area')->published()->create(['slug' => 'gerobak-a']);
+        $area = LocationArea::factory()->create();
+        $location = Location::factory()->inactive()->for($area, 'area')->create(['name' => 'Gerobak Awal']);
 
         $this->actingAs($this->userWithRole(UserRole::Operator));
 
         Livewire::test(EditLocation::class, ['record' => $location->getRouteKey()])
-            ->fillForm(['slug' => 'slug-baru-dari-operator', 'name' => 'Nama Baru'])
-            ->call('save')
-            ->assertHasNoFormErrors();
-
-        // Field slug tidak ter-dehydrate untuk Operator, jadi nilainya tidak
-        // pernah sampai ke penyimpanan.
-        $this->assertSame('gerobak-a', $location->fresh()->slug);
-        $this->assertSame('Nama Baru', $location->fresh()->name);
-    }
-
-    public function test_operator_cannot_publish_a_location(): void
-    {
-        $area = LocationArea::factory()->published()->create();
-        $location = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Draft']);
-
-        $this->actingAs($this->userWithRole(UserRole::Operator));
-
-        Livewire::test(EditLocation::class, ['record' => $location->getRouteKey()])
-            ->fillForm(['is_active' => true, 'published_at' => now()->subDay(), 'name' => 'Gerobak Draft'])
+            ->fillForm(['is_active' => true, 'name' => 'Nama Baru'])
             ->call('save')
             ->assertHasNoFormErrors();
 
         $fresh = $location->fresh();
 
-        $this->assertFalse($fresh->is_active, 'Operator tidak boleh mengaktifkan gerobak.');
-        $this->assertNull($fresh->published_at, 'Operator tidak boleh menerbitkan gerobak.');
+        // Field is_active tidak ter-dehydrate untuk Operator tanpa
+        // update_locations, jadi nilainya tidak pernah sampai ke penyimpanan.
+        $this->assertSame('Nama Baru', $fresh->name, 'Operator tetap boleh memperbarui data gerobak.');
+    }
+
+    public function test_operator_cannot_touch_the_location_page_module(): void
+    {
+        $this->actingAs($this->userWithRole(UserRole::Operator));
+
+        $this->get('/admin/halaman-lokasi')->assertForbidden();
     }
 
     // ------------------------------------------------------------- warning
 
-    public function test_saving_a_published_area_without_visible_locations_warns(): void
+    public function test_saving_an_inactive_area_warns_the_admin(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'kuningan']);
+        $area = LocationArea::factory()->create();
 
         Livewire::test(EditLocationArea::class, ['record' => $area->getRouteKey()])
-            ->fillForm(['name' => 'Kuningan'])
+            ->fillForm(['name' => 'Kuningan', 'is_active' => false])
             ->call('save')
             ->assertHasNoFormErrors()
             ->assertNotified();
-
-        // Halaman tetap hidup, tapi isinya empty state.
-        $this->get($this->areaUrl('kuningan'))
-            ->assertOk()
-            ->assertSee('Titik lokasi sedang diperbarui', false);
     }
 
     // -------------------------------------------------------------- tabel
 
     public function test_the_area_table_shows_counts_and_status(): void
     {
-        $area = LocationArea::factory()->published()->create(['name' => 'Cianjur']);
-        Location::factory()->for($area, 'area')->published()->create();
+        $area = LocationArea::factory()->create(['name' => 'Cianjur']);
         Location::factory()->for($area, 'area')->create();
+        Location::factory()->inactive()->for($area, 'area')->create();
 
         Livewire::test(ListLocationAreas::class)
             ->assertSuccessful()
@@ -376,63 +366,63 @@ class LocationAdminResourceTest extends TestCase
     }
 
     /**
-     * Kolom publikasi harus menampilkan label untuk SEMUA status, termasuk
-     * draft. Kalau state-nya dibaca langsung dari kolom published_at, baris
-     * draft bernilai null dan Filament menampilkan sel kosong.
+     * Kolom status harus punya label untuk SETIAP keadaan, termasuk saat
+     * induknya yang nonaktif. Kalau state-nya dibaca langsung dari kolom,
+     * baris tertentu akan tampil sebagai sel kosong tanpa penjelasan.
      */
-    public function test_the_publication_column_labels_every_status(): void
+    public function test_the_area_visibility_column_labels_every_state(): void
     {
-        $draft = LocationArea::factory()->create(['name' => 'Area Draft']);
-        $scheduled = LocationArea::factory()->scheduled()->create(['name' => 'Area Terjadwal']);
+        $active = LocationArea::factory()->create(['name' => 'Area Aktif']);
         $inactive = LocationArea::factory()->inactive()->create(['name' => 'Area Nonaktif']);
-        $published = LocationArea::factory()->published()->create(['name' => 'Area Terbit']);
+
+        $hiddenGroup = LocationGroup::factory()->inactive()->create();
+        $orphan = LocationArea::factory()->for($hiddenGroup, 'group')->create(['name' => 'Area Yatim']);
 
         Livewire::test(ListLocationAreas::class)
-            ->assertTableColumnStateSet('publication_status', 'Draft', $draft)
-            ->assertTableColumnStateSet('publication_status', 'Terjadwal', $scheduled)
-            ->assertTableColumnStateSet('publication_status', 'Nonaktif', $inactive)
-            ->assertTableColumnStateSet('publication_status', 'Terbit', $published);
+            ->assertTableColumnStateSet('visibility_status', 'Ya', $active)
+            ->assertTableColumnStateSet('visibility_status', 'Nonaktif', $inactive)
+            ->assertTableColumnStateSet('visibility_status', 'Induk nonaktif', $orphan);
     }
 
-    public function test_the_location_publication_column_labels_every_status(): void
+    public function test_the_location_visibility_column_labels_every_state(): void
     {
-        $visibleArea = LocationArea::factory()->published()->create();
-        $hiddenArea = LocationArea::factory()->create();
+        $visibleArea = LocationArea::factory()->create();
+        $hiddenArea = LocationArea::factory()->inactive()->create();
 
-        $draft = Location::factory()->for($visibleArea, 'area')->create();
-        $shown = Location::factory()->for($visibleArea, 'area')->published()->create();
-        $orphan = Location::factory()->for($hiddenArea, 'area')->published()->create();
+        $shown = Location::factory()->for($visibleArea, 'area')->create();
+        $inactive = Location::factory()->inactive()->for($visibleArea, 'area')->create();
+        $orphan = Location::factory()->for($hiddenArea, 'area')->create();
 
         Livewire::test(ListLocations::class)
-            ->assertTableColumnStateSet('publication_status', 'Draft', $draft)
-            ->assertTableColumnStateSet('publication_status', 'Tampil', $shown)
-            // Gerobak terbit di bawah wilayah yang belum terbit: dijelaskan,
-            // bukan dibiarkan tampak seolah sudah tayang.
-            ->assertTableColumnStateSet('publication_status', 'Induk belum tampil', $orphan);
+            ->assertTableColumnStateSet('visibility_status', 'Ya', $shown)
+            ->assertTableColumnStateSet('visibility_status', 'Nonaktif', $inactive)
+            // Gerobak aktif di bawah Area nonaktif: dijelaskan, bukan
+            // dibiarkan tampak seolah sudah tayang.
+            ->assertTableColumnStateSet('visibility_status', 'Induk nonaktif', $orphan);
     }
 
     public function test_the_area_table_can_be_searched_and_filtered(): void
     {
-        $published = LocationArea::factory()->published()->create(['name' => 'Cianjur']);
-        $draft = LocationArea::factory()->create(['name' => 'Karawang']);
+        $active = LocationArea::factory()->create(['name' => 'Cianjur']);
+        $inactive = LocationArea::factory()->inactive()->create(['name' => 'Karawang']);
 
         Livewire::test(ListLocationAreas::class)
             ->searchTable('Cianjur')
-            ->assertCanSeeTableRecords([$published])
-            ->assertCanNotSeeTableRecords([$draft]);
+            ->assertCanSeeTableRecords([$active])
+            ->assertCanNotSeeTableRecords([$inactive]);
 
         Livewire::test(ListLocationAreas::class)
-            ->filterTable('published')
-            ->assertCanSeeTableRecords([$published])
-            ->assertCanNotSeeTableRecords([$draft]);
+            ->filterTable('is_active', true)
+            ->assertCanSeeTableRecords([$active])
+            ->assertCanNotSeeTableRecords([$inactive]);
     }
 
     public function test_the_area_table_can_flag_pages_without_visible_locations(): void
     {
-        $needsAttention = LocationArea::factory()->published()->create(['name' => 'Kosong']);
+        $needsAttention = LocationArea::factory()->create(['name' => 'Kosong']);
 
-        $healthy = LocationArea::factory()->published()->create(['name' => 'Sehat']);
-        Location::factory()->for($healthy, 'area')->published()->create();
+        $healthy = LocationArea::factory()->create(['name' => 'Sehat']);
+        Location::factory()->for($healthy, 'area')->create();
 
         Livewire::test(ListLocationAreas::class)
             ->filterTable('needs_attention')
@@ -474,19 +464,26 @@ class LocationAdminResourceTest extends TestCase
 
     public function test_a_location_can_be_soft_deleted_and_restored(): void
     {
-        $area = LocationArea::factory()->published()->create(['slug' => 'cianjur']);
-        $location = Location::factory()->for($area, 'area')->published()->create(['name' => 'Gerobak Uji Hapus']);
+        $area = LocationArea::factory()->create();
+        $location = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Uji Hapus']);
 
-        $this->get($this->areaUrl('cianjur'))->assertSee('Gerobak Uji Hapus', false);
+        $page = LocationPage::factory()->published()->create();
+        $page->groups()->attach($area->location_group_id);
+        $page->locations()->attach($location);
+
+        $url = route('location-pages.show', $page->slug);
+
+        $this->get($url)->assertSee('Gerobak Uji Hapus', false);
 
         $location->delete();
 
-        $this->get($this->areaUrl('cianjur'))->assertDontSee('Gerobak Uji Hapus', false);
+        // Gerobak terhapus lenyap dari halaman, tetapi barisnya tetap ada.
+        $this->get($url)->assertDontSee('Gerobak Uji Hapus', false);
         $this->assertSoftDeleted($location);
 
         $location->restore();
 
-        $this->get($this->areaUrl('cianjur'))->assertSee('Gerobak Uji Hapus', false);
+        $this->get($url)->assertSee('Gerobak Uji Hapus', false);
     }
 
     // --------------------------------------------------------- reorder

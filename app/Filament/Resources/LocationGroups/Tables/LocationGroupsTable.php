@@ -6,7 +6,7 @@ use App\Enums\LocationGroupType;
 use App\Enums\PanelPermission;
 use App\Filament\Support\ReorderGate;
 use App\Models\LocationGroup;
-use App\Services\LocationCatalogService;
+use App\Services\LocationPageCatalogService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
@@ -38,10 +38,9 @@ class LocationGroupsTable
             /*
              | Filament menyimpan urutan baru lewat SATU query update, bukan
              | save() per model, jadi event model tidak berjalan dan cache
-             | publik tidak ikut basi dengan sendirinya. Versi cache dinaikkan
-             | di sini supaya halaman publik langsung memakai urutan baru.
+             | halaman tidak ikut basi dengan sendirinya.
              */
-            ->afterReordering(fn () => LocationCatalogService::flushCache())
+            ->afterReordering(fn () => LocationPageCatalogService::flushCache())
             /*
              | Filament merakit perintah update reorder dari Table::getQuery(),
              | dan getQuery() TIDAK menerapkan filter tabel. Jadi keanggotaan
@@ -92,13 +91,13 @@ class LocationGroupsTable
                     ->alignCenter(),
 
                 TextColumn::make('visibility_status')
-                    ->label('Tampil publik')
+                    ->label('Menyumbang gerobak')
                     ->badge()
                     // Dihitung sendiri: grup tidak punya kolom status tunggal.
                     ->state(fn (LocationGroup $record): string => self::visibilityLabel($record))
                     ->color(fn (LocationGroup $record): string => $record->isEffectivelyVisible() ? 'success' : 'gray')
                     ->tooltip(fn (LocationGroup $record): ?string => $record->isActiveGroup() && ! $record->isEffectivelyVisible()
-                        ? 'Grup ini aktif, tetapi provinsinya belum terbit sehingga areanya belum terlihat pengunjung.'
+                        ? 'Grup ini aktif, tetapi provinsinya nonaktif sehingga gerobaknya tidak tampil di halaman slug mana pun.'
                         : null),
 
                 TextColumn::make('sort_order')
@@ -145,6 +144,14 @@ class LocationGroupsTable
                             $action->failure();
                             $action->halt();
                         }
+
+                        if ($record->pages()->exists()) {
+                            $action->failureNotificationTitle(
+                                'Kota/Grup ini masih dipakai sebagai cakupan Halaman Slug Lokasi. Lepas dulu dari halamannya.'
+                            );
+                            $action->failure();
+                            $action->halt();
+                        }
                     }),
 
                 RestoreAction::make()->label('Pulihkan'),
@@ -166,6 +173,6 @@ class LocationGroupsTable
             return 'Nonaktif';
         }
 
-        return $record->isEffectivelyVisible() ? 'Tampil' : 'Provinsi belum terbit';
+        return $record->isEffectivelyVisible() ? 'Ya' : 'Provinsi nonaktif';
     }
 }

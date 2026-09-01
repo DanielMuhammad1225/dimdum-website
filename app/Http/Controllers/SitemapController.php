@@ -2,27 +2,27 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\LocationCatalogService;
+use App\Services\LocationPageCatalogService;
 use Illuminate\Http\Response;
 
 /**
  * Sitemap XML minimal.
  *
- * Hanya memuat URL yang benar-benar publik: homepage, indeks lokasi, provinsi
- * yang tampil, dan Area yang tampil di bawah Kota/Grup aktif. Draft, nonaktif,
- * terjadwal, dan terhapus tidak pernah masuk -- seluruhnya sudah tersaring di
- * payload yang sama dengan yang dipakai halaman publik, jadi sitemap tidak
- * mungkin menjanjikan URL yang berakhir 404.
+ * Hanya memuat URL yang benar-benar publik: homepage dan Halaman Slug Lokasi
+ * yang layak tampil. Master hierarki -- Provinsi, Kota/Grup, Area, Gerobak --
+ * TIDAK pernah muncul di sini: sejak slug dipisahkan, tak satu pun dari
+ * keempatnya punya URL sendiri.
  *
- * Kota/Grup tidak punya URL sendiri sehingga tidak pernah muncul di sini.
+ * Halaman draft, nonaktif, di luar periode, atau yang kehilangan seluruh
+ * gerobaknya juga tidak masuk, sehingga sitemap tidak mungkin menjanjikan URL
+ * yang berakhir 404 atau halaman kosong.
  */
 class SitemapController extends Controller
 {
-    public function __invoke(LocationCatalogService $catalog): Response
+    public function __invoke(LocationPageCatalogService $catalog): Response
     {
         $urls = [
             ['loc' => route('home'), 'priority' => '1.0'],
-            ['loc' => route('locations.index'), 'priority' => '0.8'],
             ...$catalog->sitemapUrls(),
         ];
 

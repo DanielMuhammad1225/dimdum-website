@@ -14,6 +14,11 @@ use Illuminate\Support\Str;
  * memanggil factory ini: data lokasi asli dimasukkan pemilik project lewat
  * admin.
  *
+ * Sejak slug dipisahkan, provinsi tidak lagi punya status terbit -- hanya
+ * `is_active` sebagai status operasional. Default-nya AKTIF supaya fixture
+ * biasa langsung dapat menyumbang gerobak ke halaman slug; test yang menguji
+ * cascade visibilitas menonaktifkannya secara eksplisit.
+ *
  * @extends Factory<Province>
  */
 class ProvinceFactory extends Factory
@@ -22,43 +27,17 @@ class ProvinceFactory extends Factory
 
     public function definition(): array
     {
-        $name = 'Provinsi Uji '.Str::upper(Str::random(5));
-
         return [
-            'name' => $name,
-            'slug' => Str::slug($name),
-            'description' => null,
-            'seo_title' => null,
-            'seo_description' => null,
-            'is_active' => false,
-            'published_at' => null,
+            'name' => 'Provinsi Uji '.Str::upper(Str::random(5)),
+            'is_active' => true,
             'sort_order' => 0,
         ];
-    }
-
-    /** Aktif dan sudah terbit -> tampil publik. */
-    public function published(): static
-    {
-        return $this->state(fn (): array => [
-            'is_active' => true,
-            'published_at' => now()->subDay(),
-        ]);
-    }
-
-    /** Aktif tetapi jadwal terbitnya masih di masa depan. */
-    public function scheduled(): static
-    {
-        return $this->state(fn (): array => [
-            'is_active' => true,
-            'published_at' => now()->addWeek(),
-        ]);
     }
 
     public function inactive(): static
     {
         return $this->state(fn (): array => [
             'is_active' => false,
-            'published_at' => now()->subDay(),
         ]);
     }
 }

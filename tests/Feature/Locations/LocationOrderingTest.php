@@ -15,10 +15,11 @@ use App\Filament\Resources\Provinces\Pages\ListProvinces;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationGroup;
+use App\Models\LocationPage;
 use App\Models\Province;
 use App\Models\User;
-use App\Services\LocationCatalogService;
 use App\Services\LocationOrderingService;
+use App\Services\LocationPageCatalogService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -174,11 +175,11 @@ class LocationOrderingTest extends TestCase
 
         // Nilai 999 dikirim seolah-olah dari form yang dimanipulasi.
         Livewire::test(CreateProvince::class)
-            ->fillForm(['name' => 'Provinsi Curang', 'slug' => 'provinsi-curang', 'sort_order' => 999])
+            ->fillForm(['name' => 'Provinsi Curang', 'sort_order' => 999])
             ->call('create')
             ->assertHasNoFormErrors();
 
-        $created = Province::query()->where('slug', 'provinsi-curang')->firstOrFail();
+        $created = Province::query()->where('name', 'Provinsi Curang')->firstOrFail();
 
         $this->assertSame(2, (int) $created->sort_order, 'Posisi harus dihitung server, bukan diambil dari request.');
     }
@@ -246,7 +247,7 @@ class LocationOrderingTest extends TestCase
         $a = LocationArea::factory()->for($group, 'group')->create(['sort_order' => 1]);
         $b = LocationArea::factory()->for($group, 'group')->create(['sort_order' => 2]);
 
-        $before = LocationCatalogService::cacheVersion();
+        $before = LocationPageCatalogService::cacheVersion();
 
         Livewire::test(ListLocationAreas::class)
             ->set('tableFilters.location_group_id.value', $group->getKey())
@@ -254,7 +255,7 @@ class LocationOrderingTest extends TestCase
 
         $this->assertGreaterThan(
             $before,
-            LocationCatalogService::cacheVersion(),
+            LocationPageCatalogService::cacheVersion(),
             'Versi cache harus naik supaya halaman publik memakai urutan baru.'
         );
     }
@@ -263,29 +264,36 @@ class LocationOrderingTest extends TestCase
     {
         $this->actingAsRole(UserRole::SuperAdmin);
 
-        $province = Province::factory()->published()->create(['slug' => 'jawa-barat']);
+        $province = Province::factory()->create();
         $group = LocationGroup::factory()->for($province, 'province')->create();
 
-        $first = LocationArea::factory()->for($group, 'group')->published()
-            ->create(['name' => 'Area Awal', 'slug' => 'area-awal', 'sort_order' => 1]);
-        $second = LocationArea::factory()->for($group, 'group')->published()
-            ->create(['name' => 'Area Kedua', 'slug' => 'area-kedua', 'sort_order' => 2]);
+        $first = LocationArea::factory()->for($group, 'group')
+            ->create(['name' => 'Area Awal', 'sort_order' => 1]);
+        $second = LocationArea::factory()->for($group, 'group')
+            ->create(['name' => 'Area Kedua', 'sort_order' => 2]);
 
-        Location::factory()->for($first, 'area')->published()->create();
-        Location::factory()->for($second, 'area')->published()->create();
+        $awal = Location::factory()->for($first, 'area')->create(['name' => 'Gerobak Awal']);
+        $kedua = Location::factory()->for($second, 'area')->create(['name' => 'Gerobak Kedua']);
 
-        $content = $this->get(route('locations.province', 'jawa-barat'))->getContent();
-        $this->assertLessThan(strpos($content, 'Area Kedua'), strpos($content, 'Area Awal'));
+        // Halaman publik menampilkan kedua gerobak, dikelompokkan per Area.
+        $page = LocationPage::factory()->published()->create();
+        $page->groups()->attach($group);
+        $page->locations()->attach([$awal->getKey(), $kedua->getKey()]);
+
+        $url = route('location-pages.show', $page->slug);
+
+        $content = $this->get($url)->getContent();
+        $this->assertLessThan(strpos($content, 'Gerobak Kedua'), strpos($content, 'Gerobak Awal'));
 
         Livewire::test(ListLocationAreas::class)
             ->set('tableFilters.location_group_id.value', $group->getKey())
             ->call('reorderTable', [(string) $second->getKey(), (string) $first->getKey()]);
 
-        $content = $this->get(route('locations.province', 'jawa-barat'))->getContent();
+        $content = $this->get($url)->getContent();
         $this->assertLessThan(
-            strpos($content, 'Area Awal'),
-            strpos($content, 'Area Kedua'),
-            'Halaman publik harus mengikuti urutan baru.'
+            strpos($content, 'Gerobak Awal'),
+            strpos($content, 'Gerobak Kedua'),
+            'Halaman publik harus mengikuti urutan Area yang baru.'
         );
     }
 
@@ -444,12 +452,25 @@ class LocationOrderingTest extends TestCase
         $this->assertSame(2, (int) $area->fresh()->sort_order, 'Induk tidak berubah, posisi harus tetap.');
     }
 
-    public function test_a_published_area_still_cannot_cross_provinces_when_moved(): void
+    /**
+     * Aturan perpindahan parent kini soal HALAMAN, bukan URL.
+     *
+     * Memindahkan Area keluar dari cakupan halaman yang memakai gerobaknya
+     * akan mengurangi isi landing page diam-diam, jadi ditolak -- termasuk
+     * lewat jalur form yang juga mengatur urutan.
+     */
+    public function test_an_area_used_by_a_page_cannot_move_out_of_its_scope(): void
     {
         $this->actingAsRole(UserRole::SuperAdmin);
 
         $origin = LocationGroup::factory()->create();
-        $area = LocationArea::factory()->for($origin, 'group')->published()->create();
+        $area = LocationArea::factory()->for($origin, 'group')->create();
+        $location = Location::factory()->for($area, 'area')->create();
+
+        $page = LocationPage::factory()->create();
+        $page->groups()->attach($origin);
+        $page->locations()->attach($location);
+
         $elsewhere = LocationGroup::factory()->create();
 
         Livewire::test(EditLocationArea::class, ['record' => $area->getRouteKey()])
@@ -463,7 +484,7 @@ class LocationOrderingTest extends TestCase
         $this->assertSame(
             (int) $origin->getKey(),
             (int) $area->fresh()->location_group_id,
-            'Area terbit tidak boleh pindah provinsi meskipun lewat jalur urutan.'
+            'Area yang dipakai halaman tidak boleh keluar dari cakupannya.'
         );
     }
 

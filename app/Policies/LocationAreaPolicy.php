@@ -65,14 +65,4 @@ class LocationAreaPolicy
 
         return ! $area->locations()->withTrashed()->exists();
     }
-
-    public function publish(User $user, LocationArea $area): bool
-    {
-        return $user->can(PanelPermission::PublishLocations->value);
-    }
-
-    public function changeSlug(User $user, LocationArea $area): bool
-    {
-        return $user->can(PanelPermission::ChangeLocationSlugs->value);
-    }
 }

@@ -3,6 +3,10 @@
 namespace Tests\Feature\Admin;
 
 use App\Enums\UserRole;
+use App\Models\Location;
+use App\Models\LocationArea;
+use App\Models\LocationGroup;
+use App\Models\LocationPage;
 use App\Models\Province;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -267,12 +271,11 @@ class AdminLivewireSessionTest extends TestCase
 
         $this->livewireUpdate($page->getContent(), 'CreateProvince', [
             'data.name' => 'Jawa Barat',
-            'data.slug' => 'jawa-barat',
             'data.is_active' => true,
         ], [['path' => '', 'method' => 'create', 'params' => []]])->assertOk();
 
         $this->assertSame($before, $this->sessionId(), 'Session berganti setelah membuat provinsi.');
-        $this->assertDatabaseHas('provinces', ['slug' => 'jawa-barat']);
+        $this->assertDatabaseHas('provinces', ['name' => 'Jawa Barat']);
         $this->assertStillSignedIn('Setelah create');
     }
 
@@ -368,7 +371,6 @@ class AdminLivewireSessionTest extends TestCase
 
         $response = $this->livewireUpdate($page->getContent(), 'CreateProvince', [
             'data.name' => 'Jawa Barat',
-            'data.slug' => 'jawa-barat',
             'data.is_active' => true,
         ], [['path' => '', 'method' => 'create', 'params' => []]]);
 
@@ -451,6 +453,77 @@ class AdminLivewireSessionTest extends TestCase
         $this->app['auth']->forgetGuards();
 
         $this->browserGet('/admin/provinsi')->assertForbidden();
+    }
+
+    /**
+     * Modul Halaman Slug Lokasi menempuh alur Livewire terpanjang di panel:
+     * mengetik, memilih Kota/Grup, memuat kandidat gerobak, lalu menyimpan.
+     * Seluruhnya harus berjalan di atas SATU session.
+     */
+    public function test_the_location_page_form_keeps_the_session_through_its_whole_flow(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $group = LocationGroup::factory()->create();
+        $area = LocationArea::factory()->for($group, 'group')->create();
+        $location = Location::factory()->for($area, 'area')->create();
+
+        $page = $this->browserGet('/admin/halaman-lokasi/create');
+        $page->assertOk();
+
+        $before = $this->sessionId();
+
+        // 1. Mengetik judul (sinkronisasi field, tanpa memanggil aksi).
+        $this->livewireUpdate($page->getContent(), 'CreateLocationPage', [
+            'data.title' => 'Alamat Uji Session',
+        ], [])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti saat mengetik judul.');
+
+        // 2. Memilih Kota/Grup -- memicu pemuatan kandidat gerobak.
+        $this->livewireUpdate($page->getContent(), 'CreateLocationPage', [
+            'data.group_ids' => [$group->getKey()],
+        ], [])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti saat memilih Kota/Grup.');
+
+        // 3. Menyimpan halaman.
+        $this->livewireUpdate($page->getContent(), 'CreateLocationPage', [
+            'data.title' => 'Alamat Uji Session',
+            'data.slug' => 'alamat-uji-session',
+            'data.group_ids' => [$group->getKey()],
+            'data.location_ids' => [$location->getKey()],
+        ], [['path' => '', 'method' => 'create', 'params' => []]])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menyimpan halaman.');
+        $this->assertDatabaseHas('location_pages', ['slug' => 'alamat-uji-session']);
+
+        // 4. Navigasi setelahnya tetap sebagai pengguna yang sama.
+        $this->browserGet('/admin/halaman-lokasi')->assertOk();
+        $this->assertSame($before, $this->sessionId());
+    }
+
+    public function test_reordering_location_pages_keeps_the_session(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $first = LocationPage::factory()->create(['sort_order' => 1]);
+        $second = LocationPage::factory()->create(['sort_order' => 2]);
+
+        $list = $this->browserGet('/admin/halaman-lokasi');
+        $list->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($list->getContent(), 'ListLocationPages', [], [
+            ['path' => '', 'method' => 'reorderTable', 'params' => [
+                [(string) $second->getKey(), (string) $first->getKey()],
+            ]],
+        ])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menata urutan.');
+        $this->assertSame(1, (int) $second->fresh()->sort_order);
+        $this->assertStillSignedIn('Setelah reorder');
     }
 
     /**

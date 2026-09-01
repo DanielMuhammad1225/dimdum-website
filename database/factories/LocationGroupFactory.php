@@ -19,21 +19,17 @@ class LocationGroupFactory extends Factory
 
     public function definition(): array
     {
-        $name = 'Grup Uji '.Str::upper(Str::random(5));
-
         return [
             /*
-             | Provinsi induk dibuat SUDAH TERBIT supaya fixture default
-             | benar-benar dapat tampil publik; kalau tidak, hampir setiap
-             | test harus menerbitkan rantai induknya sendiri lebih dulu.
-             | Test yang justru menguji cascade visibilitas membuat induk
-             | draft/nonaktif secara eksplisit.
+             | Provinsi induk dibuat AKTIF supaya fixture default benar-benar
+             | dapat menyumbang gerobak ke halaman slug; kalau tidak, hampir
+             | setiap test harus mengaktifkan rantai induknya sendiri lebih
+             | dulu. Test yang justru menguji cascade visibilitas membuat induk
+             | nonaktif secara eksplisit.
              */
-            'province_id' => Province::factory()->published(),
-            'name' => $name,
-            'slug' => Str::slug($name),
+            'province_id' => Province::factory(),
+            'name' => 'Grup Uji '.Str::upper(Str::random(5)),
             'type' => LocationGroupType::Administrative,
-            'description' => null,
             'is_active' => true,
             'sort_order' => 0,
         ];

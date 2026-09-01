@@ -104,6 +104,24 @@ class SafeUrl
             return false;
         }
 
+        /*
+         | Backslash bisa dinormalisasi menjadi '/' oleh sebagian browser,
+         | sehingga 'https://baik.test\@jahat.test' berakhir di host yang
+         | berbeda dari yang dibaca parse_url().
+         */
+        if (str_contains($value, '\\')) {
+            return false;
+        }
+
+        /*
+         | Userinfo ditolak. 'https://tampak-benar.test@jahat.test' mengarah ke
+         | jahat.test, tetapi bagi pembaca manusia tampak seperti tautan ke
+         | tampak-benar.test -- persis pola phishing yang paling sering lolos.
+         */
+        if (parse_url($value, PHP_URL_USER) !== null || parse_url($value, PHP_URL_PASS) !== null) {
+            return false;
+        }
+
         $host = parse_url($value, PHP_URL_HOST);
 
         if (! is_string($host) || $host === '') {

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\HomepageContentService;
-use App\Services\LocationCatalogService;
+use App\Services\LocationPageCatalogService;
 use App\Services\SiteSettingsService;
 use Illuminate\Contracts\View\View;
 
@@ -27,18 +27,18 @@ class HomeController extends Controller
     public function __invoke(
         SiteSettingsService $siteSettings,
         HomepageContentService $homepageContent,
-        LocationCatalogService $locationCatalog,
+        LocationPageCatalogService $locationCatalog,
     ): View {
         $brand = $siteSettings->brand();
         $homepage = $homepageContent->homepage();
-        $locationAreas = $locationCatalog->visibleAreasForHomepage();
+        $locationPages = $locationCatalog->visiblePagesForHomepage();
 
         /*
          | Ketersediaan lokasi kini ditentukan data nyata, bukan flag config.
          | Overlay satu key ini menjaga kontrak $brand tetap sama sehingga
          | section lain (mis. CTA penutup) ikut jujur tanpa perlu diubah.
          */
-        $brand['locations']['available'] = $locationAreas !== [];
+        $brand['locations']['available'] = $locationPages !== [];
 
         return view('home', [
             'brand' => $brand,
@@ -46,7 +46,7 @@ class HomeController extends Controller
             'nav' => $homepage['nav'],
             'sections' => $this->resolveSections($homepage),
             'seo' => $siteSettings->seo(),
-            'locationAreas' => $locationAreas,
+            'locationPages' => $locationPages,
         ]);
     }
 

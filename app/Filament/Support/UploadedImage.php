@@ -39,6 +39,9 @@ class UploadedImage
      */
     public const LOCATION_ROOT_DIRECTORY = 'locations';
 
+    /** Poster Halaman Slug Lokasi. */
+    public const LOCATION_PAGE_DIRECTORY = 'location-pages';
+
     /**
      * MIME type yang diterima, sekaligus ekstensi resmi untuk masing-masing.
      */
@@ -58,6 +61,7 @@ class UploadedImage
         self::HERO_DIRECTORY,
         self::OG_DIRECTORY,
         self::LOCATION_ROOT_DIRECTORY,
+        self::LOCATION_PAGE_DIRECTORY,
     ];
 
     public static function make(string $name, string $directory): FileUpload
@@ -95,6 +99,21 @@ class UploadedImage
             ->helperText('Gambar yang tampil saat tautan dibagikan. Ukuran ideal 1200x630 px. JPG, PNG, atau WebP, maksimal 3 MB.')
             ->imageEditor()
             ->imageEditorAspectRatios(['1200:630']);
+    }
+
+    /**
+     * Poster Halaman Slug Lokasi.
+     *
+     * Aturannya sama dengan upload lain: allowlist MIME tanpa SVG, maksimal
+     * 3 MB, nama file acak, dan tipe ditentukan dari isi berkas.
+     */
+    public static function locationPagePoster(string $name = 'poster_path'): FileUpload
+    {
+        return self::make($name, self::LOCATION_PAGE_DIRECTORY)
+            ->label('Poster halaman')
+            ->helperText('JPG, PNG, atau WebP. Maksimal 3 MB. Tampil sebagai gambar utama halaman dan pratinjau saat dibagikan.')
+            ->imageEditor()
+            ->imageEditorAspectRatios([null, '4:5', '1:1', '16:9']);
     }
 
     /**

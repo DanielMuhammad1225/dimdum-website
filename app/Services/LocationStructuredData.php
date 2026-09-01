@@ -3,7 +3,7 @@
 namespace App\Services;
 
 /**
- * Structured data halaman lokasi.
+ * Structured data Halaman Slug Lokasi.
  *
  * Prinsipnya satu: HANYA FAKTA YANG ADA DI DATABASE.
  * Tidak ada telepon, jam buka, rating, harga, atau koordinat yang dikarang.
@@ -32,113 +32,33 @@ class LocationStructuredData
         | JSON_HEX_QUOT;
 
     /**
-     * Indeks lokasi: daftar provinsi + breadcrumb.
+     * Halaman Slug Lokasi: daftar gerobak sebagai FoodEstablishment.
      *
-     * @param  list<array<string, mixed>>  $provinces
-     * @return array<string, mixed>
-     */
-    public function forIndex(array $provinces, string $name, string $description, string $canonical): array
-    {
-        $items = [];
-        $position = 1;
-
-        foreach ($provinces as $province) {
-            $items[] = [
-                '@type' => 'ListItem',
-                'position' => $position++,
-                'name' => $province['name'],
-                'item' => $province['url'],
-            ];
-        }
-
-        $list = [
-            '@type' => 'ItemList',
-            'name' => $name,
-            'description' => $description,
-            'url' => $canonical,
-            'numberOfItems' => count($items),
-        ];
-
-        if ($items !== []) {
-            $list['itemListElement'] = $items;
-        }
-
-        return $this->graph([
-            $this->breadcrumbs([['Lokasi Gerobak DIMDUM', $canonical]]),
-            $list,
-        ]);
-    }
-
-    /**
-     * Halaman provinsi: daftar Area (menembus grup) + breadcrumb.
-     *
-     * Kota/Grup TIDAK muncul di breadcrumb karena ia tidak punya URL sendiri;
+     * Breadcrumb hanya dua tingkat -- beranda lalu halaman ini. Provinsi,
+     * Kota/Grup, dan Area TIDAK muncul karena tak satu pun punya URL sendiri;
      * mencantumkannya tanpa tautan hanya akan membingungkan mesin pencari.
      *
-     * @param  array<string, mixed>  $province
-     * @return array<string, mixed>
-     */
-    public function forProvince(array $province, string $canonical): array
-    {
-        $items = [];
-        $position = 1;
-
-        foreach ($province['groups'] ?? [] as $group) {
-            foreach ($group['areas'] as $area) {
-                $items[] = [
-                    '@type' => 'ListItem',
-                    'position' => $position++,
-                    'name' => $area['name'],
-                    'item' => $area['url'],
-                ];
-            }
-        }
-
-        $list = [
-            '@type' => 'ItemList',
-            'name' => $province['headline'],
-            'description' => $province['description'],
-            'url' => $canonical,
-            'numberOfItems' => count($items),
-        ];
-
-        if ($items !== []) {
-            $list['itemListElement'] = $items;
-        }
-
-        return $this->graph([
-            $this->breadcrumbs([
-                ['Lokasi Gerobak DIMDUM', route('locations.index')],
-                [$province['name'], $canonical],
-            ]),
-            $list,
-        ]);
-    }
-
-    /**
-     * Halaman Area: daftar gerobak sebagai FoodEstablishment + breadcrumb.
-     *
-     * @param  array<string, mixed>  $area
+     * @param  array<string, mixed>  $page
      * @param  array<string, mixed>  $brand
      * @return array<string, mixed>
      */
-    public function forArea(array $area, array $brand, string $canonical): array
+    public function forPage(array $page, array $brand, string $canonical): array
     {
         $items = [];
         $position = 1;
 
-        foreach ($area['locations'] ?? [] as $location) {
+        foreach ($page['locations'] ?? [] as $location) {
             $items[] = [
                 '@type' => 'ListItem',
                 'position' => $position++,
-                'item' => $this->foodEstablishment($location, $brand, $area['province_name'] ?? null),
+                'item' => $this->foodEstablishment($location, $brand, $location['province_name'] ?? null),
             ];
         }
 
         $list = [
             '@type' => 'ItemList',
-            'name' => $area['headline'],
-            'description' => $area['description'],
+            'name' => $page['seo_title'],
+            'description' => $page['seo_description'],
             'url' => $canonical,
             'numberOfItems' => count($items),
         ];
@@ -149,9 +69,8 @@ class LocationStructuredData
 
         return $this->graph([
             $this->breadcrumbs([
-                ['Lokasi Gerobak DIMDUM', route('locations.index')],
-                [$area['province_name'], $area['province_url']],
-                [$area['name'], $canonical],
+                ['Beranda', route('home')],
+                [$page['title'], $canonical],
             ]),
             $list,
         ]);

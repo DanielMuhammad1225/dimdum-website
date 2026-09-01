@@ -7,6 +7,13 @@ namespace App\Enums;
  *
  * Sumber tunggal nama permission. Jangan menulis string permission langsung
  * di controller, policy, resource, atau Blade -- selalu lewat enum ini.
+ *
+ * Modul lokasi terbagi dua sejak slug dipisahkan dari hierarki:
+ *
+ *   MASTER HIERARKI  Provinsi, Kota/Grup, Area, Gerobak. Data internal
+ *                    operasional; tidak punya URL publik.
+ *   HALAMAN SLUG     Landing page publik. Satu-satunya yang punya slug,
+ *                    publikasi, dan SEO -- karena itu izinnya lebih ketat.
  */
 enum PanelPermission: string
 {
@@ -16,7 +23,7 @@ enum PanelPermission: string
     case ManageSiteSettings = 'manage_site_settings';
     case ManageHomepage = 'manage_homepage';
 
-    // --------------------------------------------------------- modul lokasi
+    // ------------------------------------------------- master hierarki lokasi
     case ViewLocations = 'view_locations';
     case CreateLocations = 'create_locations';
     case UpdateLocations = 'update_locations';
@@ -24,9 +31,16 @@ enum PanelPermission: string
     case ManageLocationProvinces = 'manage_location_provinces';
     case ManageLocationGroups = 'manage_location_groups';
     case ManageLocationAreas = 'manage_location_areas';
-    case PublishLocations = 'publish_locations';
-    case ChangeLocationSlugs = 'change_location_slugs';
     case ManageLocationMedia = 'manage_location_media';
+
+    // --------------------------------------------------- halaman slug lokasi
+    case ViewLocationPages = 'view_location_pages';
+    case CreateLocationPages = 'create_location_pages';
+    case UpdateLocationPages = 'update_location_pages';
+    case DeleteLocationPages = 'delete_location_pages';
+    case PublishLocationPages = 'publish_location_pages';
+    case ChangeLocationPageSlugs = 'change_location_page_slugs';
+    case ManageLocationPageMedia = 'manage_location_page_media';
 
     public function label(): string
     {
@@ -44,15 +58,21 @@ enum PanelPermission: string
             self::ManageLocationProvinces => 'Kelola Provinsi',
             self::ManageLocationGroups => 'Kelola Kota/Grup',
             self::ManageLocationAreas => 'Kelola Area',
-            self::PublishLocations => 'Terbitkan Lokasi',
-            self::ChangeLocationSlugs => 'Ubah Slug Lokasi',
             self::ManageLocationMedia => 'Kelola Foto Gerobak',
+
+            self::ViewLocationPages => 'Lihat Halaman Slug Lokasi',
+            self::CreateLocationPages => 'Tambah Halaman Slug Lokasi',
+            self::UpdateLocationPages => 'Ubah Halaman Slug Lokasi',
+            self::DeleteLocationPages => 'Hapus Halaman Slug Lokasi',
+            self::PublishLocationPages => 'Terbitkan Halaman Slug Lokasi',
+            self::ChangeLocationPageSlugs => 'Ubah Slug Halaman Lokasi',
+            self::ManageLocationPageMedia => 'Kelola Poster Halaman Lokasi',
         };
     }
 
     /**
-     * Permission modul lokasi. Dipakai UserRole untuk memberi Admin seluruh
-     * kemampuan lokasi tanpa menulis ulang daftarnya.
+     * Permission master hierarki. Dipakai UserRole untuk memberi Admin
+     * seluruh kemampuan hierarki tanpa menulis ulang daftarnya.
      *
      * @return list<self>
      */
@@ -66,9 +86,25 @@ enum PanelPermission: string
             self::ManageLocationProvinces,
             self::ManageLocationGroups,
             self::ManageLocationAreas,
-            self::PublishLocations,
-            self::ChangeLocationSlugs,
             self::ManageLocationMedia,
+        ];
+    }
+
+    /**
+     * Permission modul Halaman Slug Lokasi.
+     *
+     * @return list<self>
+     */
+    public static function locationPageCases(): array
+    {
+        return [
+            self::ViewLocationPages,
+            self::CreateLocationPages,
+            self::UpdateLocationPages,
+            self::DeleteLocationPages,
+            self::PublishLocationPages,
+            self::ChangeLocationPageSlugs,
+            self::ManageLocationPageMedia,
         ];
     }
 

@@ -5,13 +5,11 @@ namespace App\Filament\Resources\Locations\Tables;
 use App\Enums\PanelPermission;
 use App\Filament\Support\ReorderGate;
 use App\Models\Location;
-use App\Services\LocationCatalogService;
-use Filament\Actions\Action;
+use App\Services\LocationPageCatalogService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
-use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\Filter;
@@ -46,7 +44,7 @@ class LocationsTable
              | publik tidak ikut basi dengan sendirinya. Versi cache dinaikkan
              | di sini supaya halaman publik langsung memakai urutan baru.
              */
-            ->afterReordering(fn () => LocationCatalogService::flushCache())
+            ->afterReordering(fn () => LocationPageCatalogService::flushCache())
             /*
              | Filament merakit perintah update reorder dari Table::getQuery(),
              | dan getQuery() TIDAK menerapkan filter tabel. Jadi keanggotaan
@@ -105,24 +103,16 @@ class LocationsTable
                     ->boolean()
                     ->alignCenter(),
 
-                TextColumn::make('publication_status')
-                    ->label('Publikasi')
+                TextColumn::make('visibility_status')
+                    ->label('Bisa tampil')
                     ->badge()
-                    /*
-                     | State dihitung sendiri, TIDAK dibaca dari kolom
-                     | published_at: baris draft bernilai null dan Filament
-                     | akan menampilkan placeholder kosong alih-alih memanggil
-                     | formatStateUsing().
-                     */
-                    ->state(fn (Location $record): string => self::publicationLabel($record))
-                    ->color(fn (Location $record): string => match (true) {
-                        $record->isEffectivelyVisible() => 'success',
-                        $record->published_at !== null => 'warning',
-                        default => 'gray',
-                    })
-                    // Menjelaskan kenapa gerobak terbit tetap tidak tampil.
-                    ->tooltip(fn (Location $record): ?string => $record->isPubliclyVisible() && ! $record->isEffectivelyVisible()
-                        ? 'Gerobak ini sudah terbit, tetapi Area, Kota/Grup, atau provinsinya belum tampil sehingga belum terlihat pengunjung.'
+                    // Dihitung sendiri: rantai induk tidak tersimpan sebagai
+                    // satu kolom status.
+                    ->state(fn (Location $record): string => self::visibilityLabel($record))
+                    ->color(fn (Location $record): string => $record->isEffectivelyVisible() ? 'success' : 'gray')
+                    // Menjelaskan kenapa gerobak aktif tetap tidak tampil.
+                    ->tooltip(fn (Location $record): ?string => $record->isActiveLocation() && ! $record->isEffectivelyVisible()
+                        ? 'Gerobak ini aktif, tetapi Area, Kota/Grup, atau provinsinya nonaktif sehingga tidak tampil di halaman slug mana pun.'
                         : null),
 
                 TextColumn::make('maps_status')
@@ -162,9 +152,9 @@ class LocationsTable
                     ->falseLabel('Nonaktif')
                     ->placeholder('Semua'),
 
-                Filter::make('published')
-                    ->label('Sudah terbit')
-                    ->query(fn (Builder $query): Builder => $query->published()),
+                Filter::make('not_on_any_page')
+                    ->label('Belum dipakai halaman slug')
+                    ->query(fn (Builder $query): Builder => $query->whereDoesntHave('pages')),
 
                 Filter::make('missing_maps')
                     ->label('Belum ada tautan peta')
@@ -175,18 +165,6 @@ class LocationsTable
                 TrashedFilter::make()->label('Data terhapus'),
             ])
             ->recordActions([
-                Action::make('preview')
-                    ->label('Lihat area')
-                    ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
-                    ->color('gray')
-                    // Halaman detail gerobak belum ada, jadi preview mengarah
-                    // ke halaman Area induknya.
-                    ->visible(fn (Location $record): bool => $record->area?->isEffectivelyVisible() ?? false)
-                    ->url(fn (Location $record): string => route(
-                        'locations.area',
-                        [$record->area->group->province->slug, $record->area->slug],
-                    ), shouldOpenInNewTab: true),
-
                 EditAction::make()->label('Ubah'),
                 DeleteAction::make()->label('Hapus'),
                 RestoreAction::make()->label('Pulihkan'),
@@ -205,20 +183,12 @@ class LocationsTable
             ->emptyStateDescription('Tambahkan gerobak dan hubungkan ke Area yang sesuai.');
     }
 
-    protected static function publicationLabel(Location $record): string
+    protected static function visibilityLabel(Location $record): string
     {
-        if ($record->published_at === null) {
-            return 'Draft';
-        }
-
-        if ($record->published_at->isFuture()) {
-            return 'Terjadwal';
-        }
-
-        if (! $record->is_active) {
+        if (! $record->isActiveLocation()) {
             return 'Nonaktif';
         }
 
-        return $record->isEffectivelyVisible() ? 'Tampil' : 'Induk belum tampil';
+        return $record->isEffectivelyVisible() ? 'Ya' : 'Induk nonaktif';
     }
 }

@@ -148,6 +148,6 @@ class LocationOrderingService
             $this->normalize($model::class, $newScope);
         });
 
-        LocationCatalogService::flushCache();
+        LocationPageCatalogService::flushCache();
     }
 }

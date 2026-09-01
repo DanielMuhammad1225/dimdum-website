@@ -21,12 +21,9 @@ class LocationFactory extends Factory
 
     public function definition(): array
     {
-        $name = 'Gerobak Uji '.Str::upper(Str::random(5));
-
         return [
             'location_area_id' => LocationArea::factory(),
-            'name' => $name,
-            'slug' => Str::slug($name),
+            'name' => 'Gerobak Uji '.Str::upper(Str::random(5)),
             'full_address' => 'Alamat uji nomor '.random_int(1, 99),
             'village' => null,
             'district' => null,
@@ -38,33 +35,15 @@ class LocationFactory extends Factory
             'latitude' => null,
             'longitude' => null,
             'google_maps_url' => null,
-            'is_active' => false,
-            'published_at' => null,
+            'is_active' => true,
             'sort_order' => 0,
         ];
-    }
-
-    public function published(): static
-    {
-        return $this->state(fn (): array => [
-            'is_active' => true,
-            'published_at' => now()->subDay(),
-        ]);
-    }
-
-    public function scheduled(): static
-    {
-        return $this->state(fn (): array => [
-            'is_active' => true,
-            'published_at' => now()->addWeek(),
-        ]);
     }
 
     public function inactive(): static
     {
         return $this->state(fn (): array => [
             'is_active' => false,
-            'published_at' => now()->subDay(),
         ]);
     }
 }

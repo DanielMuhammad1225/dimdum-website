@@ -85,12 +85,16 @@ class LocationAuthorizationTest extends TestCase
             );
         }
 
-        // Yang mengubah URL publik atau menghapus data tetap tertutup.
+        /*
+         | Yang menghapus data ATAU menyentuh halaman publik tetap tertutup.
+         | Seluruh permission Halaman Slug Lokasi termasuk di dalamnya:
+         | Operator tidak boleh membuat, menerbitkan, menghapus, maupun
+         | mengganti slug halaman.
+         */
         foreach ([
             PanelPermission::ManageLocationAreas,
-            PanelPermission::PublishLocations,
-            PanelPermission::ChangeLocationSlugs,
             PanelPermission::DeleteLocations,
+            ...PanelPermission::locationPageCases(),
         ] as $permission) {
             $this->assertFalse(
                 Gate::forUser($operator)->allows($permission->value),
@@ -274,12 +278,12 @@ class LocationAuthorizationTest extends TestCase
         $role = Role::findByName(UserRole::Operator->value);
 
         // Permission tambahan yang diberikan manual harus bertahan.
-        $role->givePermissionTo(PanelPermission::PublishLocations->value);
+        $role->givePermissionTo(PanelPermission::PublishLocationPages->value);
 
         $this->seed(RolesAndPermissionsSeeder::class);
 
         $this->assertTrue(
-            $role->fresh()->hasPermissionTo(PanelPermission::PublishLocations->value),
+            $role->fresh()->hasPermissionTo(PanelPermission::PublishLocationPages->value),
             'Seeder tidak boleh mencabut permission yang diberikan manual.'
         );
     }

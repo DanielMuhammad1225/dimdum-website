@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
-use App\Services\LocationCatalogService;
+use App\Services\LocationPageCatalogService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * Slug lama sebuah provinsi.
+ * Slug lama sebuah Halaman Slug Lokasi.
  *
- * Selalu menunjuk ke PROVINSI, bukan ke slug lain, sehingga berapa kali pun
+ * Selalu menunjuk ke HALAMAN, bukan ke slug lain, sehingga berapa kali pun
  * slug berganti (a -> b -> c) seluruh slug lama tetap mengarah ke canonical
  * terbaru dalam satu lompatan dan rantai/loop mustahil terbentuk.
  */
-class LocationProvinceSlugRedirect extends Model
+class LocationPageSlugRedirect extends Model
 {
     use HasFactory;
 
@@ -22,19 +22,19 @@ class LocationProvinceSlugRedirect extends Model
      * @var list<string>
      */
     protected $fillable = [
-        'province_id',
+        'location_page_id',
         'old_slug',
         'created_by',
     ];
 
     protected static function booted(): void
     {
-        static::saved(fn () => LocationCatalogService::flushCache());
-        static::deleted(fn () => LocationCatalogService::flushCache());
+        static::saved(fn () => LocationPageCatalogService::flushCache());
+        static::deleted(fn () => LocationPageCatalogService::flushCache());
     }
 
-    public function province(): BelongsTo
+    public function page(): BelongsTo
     {
-        return $this->belongsTo(Province::class);
+        return $this->belongsTo(LocationPage::class, 'location_page_id');
     }
 }

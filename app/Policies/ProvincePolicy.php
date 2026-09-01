@@ -66,14 +66,4 @@ class ProvincePolicy
 
         return ! $province->groups()->withTrashed()->exists();
     }
-
-    public function publish(User $user, Province $province): bool
-    {
-        return $user->can(PanelPermission::PublishLocations->value);
-    }
-
-    public function changeSlug(User $user, Province $province): bool
-    {
-        return $user->can(PanelPermission::ChangeLocationSlugs->value);
-    }
 }

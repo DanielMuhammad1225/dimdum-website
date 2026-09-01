@@ -1,45 +1,38 @@
 <?php
 
 use App\Http\Controllers\HomeController;
-use App\Http\Controllers\LocationController;
+use App\Http\Controllers\LocationPageController;
 use App\Http\Controllers\SitemapController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', HomeController::class)->name('home');
 
 /*
-| Hierarki URL lokasi:
+| URL publik lokasi:
 |
-|   /lokasi                       -> daftar provinsi
-|   /lokasi/{province}            -> Kota/Grup sebagai heading + kartu Area
-|   /lokasi/{province}/{area}     -> landing Area + daftar gerobak
+|   /alamat/{slug}   -> satu Halaman Slug Lokasi
 |
-| Kota/Grup SENGAJA tidak punya URL sendiri: ia hanya pengelompokan di
-| halaman provinsi, sehingga tidak ada halaman tipis yang bersaing di
-| pencarian dengan halaman Area.
+| Slug dimiliki HANYA oleh LocationPage. Provinsi, Kota/Grup, Area, dan
+| Gerobak adalah master data internal dan tidak punya URL sendiri.
+|
+| Route hierarki lama (/lokasi, /lokasi/{province}, /lokasi/{province}/{area})
+| DIHAPUS, bukan dialihkan: keempat tabelnya tidak pernah berisi data nyata dan
+| tidak ada satu pun URL yang sudah terbit, sehingga redirect apa pun hanya
+| akan mengarang tujuan.
 |
 | Slug diterima sebagai STRING biasa, bukan route-model binding, supaya
-| controller sempat memeriksa tabel redirect sebelum memutuskan 404.
-| Binding implisit akan langsung 404 dan mematikan URL lama yang masih
-| beredar di iklan.
+| controller sempat memeriksa tabel redirect sebelum memutuskan 404. Binding
+| implisit akan langsung 404 dan mematikan URL lama yang masih beredar.
 |
-| Pola slug dibatasi huruf kecil, angka, dan tanda hubung -- nama view,
-| path, dan karakter aneh tidak pernah sampai ke controller.
+| Pola slug dibatasi huruf kecil, angka, dan tanda hubung -- nama view, path,
+| dan karakter aneh tidak pernah sampai ke controller.
 |
-| Route detail gerobak (/lokasi/{province}/{area}/{location}) SENGAJA belum
-| didaftarkan pada fase ini, meskipun slug gerobak sudah tersimpan dan unik
-| di dalam areanya.
+| Route detail gerobak SENGAJA tidak dibuat.
 */
 $slug = '[a-z0-9]+(?:-[a-z0-9]+)*';
 
-Route::get('/lokasi', [LocationController::class, 'index'])->name('locations.index');
-
-Route::get('/lokasi/{province}', [LocationController::class, 'province'])
-    ->where('province', $slug)
-    ->name('locations.province');
-
-Route::get('/lokasi/{province}/{area}', [LocationController::class, 'area'])
-    ->where(['province' => $slug, 'area' => $slug])
-    ->name('locations.area');
+Route::get('/alamat/{slug}', [LocationPageController::class, 'show'])
+    ->where('slug', $slug)
+    ->name('location-pages.show');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');

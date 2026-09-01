@@ -9,6 +9,7 @@ use App\Filament\Support\UploadedImage;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationImage;
+use App\Models\LocationPage;
 use App\Models\User;
 use App\Services\ImageMetadata;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -24,17 +25,23 @@ class LocationImageUploadTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * URL publik area kini dua segmen; slug provinsinya dibaca dari rantai
-     * induk sebenarnya.
+     * Halaman publik tempat gerobak uji ini tampil.
+     *
+     * Gerobak tidak lagi punya URL sendiri: ia muncul di Halaman Slug Lokasi
+     * yang memilihnya. Helper ini membuat halaman itu sekali, lalu memakainya
+     * ulang.
      */
-    private function areaUrl(string $areaSlug): string
+    private function publicUrl(): string
     {
-        $area = LocationArea::withTrashed()
-            ->where('slug', $areaSlug)
-            ->firstOrFail()
-            ->load('group.province');
+        $page = LocationPage::query()->first();
 
-        return route('locations.area', [$area->group->province->slug, $areaSlug]);
+        if ($page === null) {
+            $page = LocationPage::factory()->published()->create();
+            $page->groups()->attach($this->area->location_group_id);
+            $page->locations()->attach($this->location);
+        }
+
+        return route('location-pages.show', $page->slug);
     }
 
     protected LocationArea $area;
@@ -53,8 +60,8 @@ class LocationImageUploadTest extends TestCase
         $user->assignRole(UserRole::SuperAdmin->value);
         $this->actingAs($user->fresh());
 
-        $this->area = LocationArea::factory()->published()->create(['slug' => 'cianjur', 'name' => 'Cianjur']);
-        $this->location = Location::factory()->for($this->area, 'area')->published()->create(['name' => 'Gerobak Uji']);
+        $this->area = LocationArea::factory()->create(['name' => 'Cianjur']);
+        $this->location = Location::factory()->for($this->area, 'area')->create(['name' => 'Gerobak Uji']);
     }
 
     /**
@@ -248,7 +255,7 @@ class LocationImageUploadTest extends TestCase
 
         $path = $this->location->images()->firstOrFail()->image_path;
 
-        $content = $this->get($this->areaUrl('cianjur'))->getContent();
+        $content = $this->get($this->publicUrl())->getContent();
 
         $this->assertStringContainsString('storage/'.$path, $content);
         $this->assertStringContainsString('width="1280"', $content);
@@ -263,7 +270,7 @@ class LocationImageUploadTest extends TestCase
         $this->save([$this->imageRow(UploadedFile::fake()->image('foto.jpg', 1280, 720))])
             ->assertHasNoFormErrors();
 
-        $content = $this->get($this->areaUrl('cianjur'))->getContent();
+        $content = $this->get($this->publicUrl())->getContent();
 
         preg_match_all('/<img\s[^>]*>/i', $content, $matches);
 
@@ -333,7 +340,7 @@ class LocationImageUploadTest extends TestCase
 
         Storage::disk('public')->assertExists($path);
 
-        $this->get($this->areaUrl('cianjur'))
+        $this->get($this->publicUrl())
             ->assertOk()
             ->assertSee('storage/'.$path, false);
     }
@@ -419,7 +426,7 @@ class LocationImageUploadTest extends TestCase
             'image_path' => 'locations/hilang/tidak-ada.jpg',
         ]);
 
-        $content = $this->get($this->areaUrl('cianjur'))->getContent();
+        $content = $this->get($this->publicUrl())->getContent();
 
         $this->assertStringNotContainsString('tidak-ada.jpg', $content);
         $this->assertStringNotContainsString('src=""', $content);

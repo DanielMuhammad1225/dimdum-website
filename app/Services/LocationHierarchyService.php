@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationGroup;
 
@@ -17,14 +18,17 @@ use App\Models\LocationGroup;
  *  1. Kota/Grup yang dipilih harus benar-benar berada di Provinsi yang
  *     dipilih.
  *
- *  2. Area yang PERNAH terbit tidak boleh berpindah ke Provinsi lain.
- *     Alasannya URL: /lokasi/{province}/{area}. Berpindah provinsi mengubah
- *     segmen pertama URL, sehingga tautan iklan yang sudah beredar akan
- *     menunjuk kombinasi yang tidak lagi sah. Perpindahan antar-Kota/Grup di
- *     dalam provinsi yang sama TIDAK mengubah URL dan karenanya diizinkan.
+ *  2. Perpindahan parent tidak boleh MERUSAK hubungan Halaman Slug Lokasi.
+ *     Sejak slug dipisahkan, hierarki tidak lagi menentukan URL -- jadi
+ *     perpindahan pada dirinya sendiri aman. Yang berbahaya adalah efeknya:
+ *     gerobak yang ikut pindah bisa keluar dari cakupan Kota/Grup halaman
+ *     yang memilihnya, sehingga isi landing page berkurang diam-diam.
+ *     Kasus itu diblokir dan nama halamannya disebut.
  */
 class LocationHierarchyService
 {
+    public function __construct(protected LocationPageScopeService $scope) {}
+
     /**
      * Apakah Kota/Grup ini benar-benar milik provinsi tersebut?
      */
@@ -65,9 +69,7 @@ class LocationHierarchyService
             return 'Area wajib berada di bawah satu Kota/Grup.';
         }
 
-        $targetProvinceId = $this->provinceIdForGroup($targetGroupId);
-
-        if ($targetProvinceId === null) {
+        if ($this->provinceIdForGroup($targetGroupId) === null) {
             return 'Kota/Grup yang dipilih tidak ditemukan.';
         }
 
@@ -82,21 +84,50 @@ class LocationHierarchyService
             return null;
         }
 
-        $currentProvinceId = $this->provinceIdForGroup($currentGroupId);
+        $broken = $this->scope->pagesBrokenByAreaMove($area->getKey(), $targetGroupId);
 
-        // Pindah di dalam provinsi yang sama: URL tidak berubah, aman.
-        if ($currentProvinceId === $targetProvinceId) {
+        if ($broken->isNotEmpty()) {
+            return 'Area ini tidak bisa dipindahkan: gerobaknya masih dipakai halaman '
+                .$broken->implode(', ').', dan Kota/Grup tujuan berada di luar cakupan halaman tersebut. '
+                .'Tambahkan Kota/Grup tujuan ke halaman itu, atau lepas dulu gerobaknya dari halaman.';
+        }
+
+        return null;
+    }
+
+    /**
+     * Bolehkah gerobak dipindahkan ke Area tujuan?
+     *
+     * Mengembalikan null bila boleh, atau kalimat penjelasan bila ditolak.
+     */
+    public function rejectionReasonForLocationMove(Location $location, ?int $targetAreaId): ?string
+    {
+        if ($targetAreaId === null) {
+            return 'Gerobak wajib berada di bawah satu Area.';
+        }
+
+        if (! LocationArea::query()->whereKey($targetAreaId)->exists()) {
+            return 'Area yang dipilih tidak ditemukan.';
+        }
+
+        if (! $location->exists) {
             return null;
         }
 
-        if ($area->hasEverBeenPublished()) {
-            return 'Area ini sudah pernah terbit, jadi tidak boleh dipindahkan ke provinsi lain. '
-                .'URL halaman memuat nama provinsi, sehingga perpindahan akan mematikan tautan '
-                .'iklan yang sedang berjalan. Pindahkan ke Kota/Grup lain di provinsi yang sama, '
-                .'atau buat Area baru di provinsi tujuan.';
+        $currentAreaId = $location->location_area_id === null ? null : (int) $location->location_area_id;
+
+        if ($currentAreaId === $targetAreaId) {
+            return null;
         }
 
-        // Area draft belum punya URL publik -- perpindahan lintas provinsi aman.
+        $broken = $this->scope->pagesBrokenByLocationMove($location->getKey(), $targetAreaId);
+
+        if ($broken->isNotEmpty()) {
+            return 'Gerobak ini tidak bisa dipindahkan: ia masih dipakai halaman '
+                .$broken->implode(', ').', dan Area tujuan berada di luar cakupan halaman tersebut. '
+                .'Tambahkan Kota/Grup Area tujuan ke halaman itu, atau lepas dulu gerobaknya dari halaman.';
+        }
+
         return null;
     }
 }

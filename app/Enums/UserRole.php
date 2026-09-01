@@ -41,22 +41,26 @@ enum UserRole: string
 
             // manage_users sengaja BELUM diberikan ke Admin sampai aturan
             // User Management dibuat pada fase berikutnya. Seluruh permission
-            // modul lokasi diberikan penuh.
+            // modul lokasi -- master hierarki DAN halaman slug -- diberikan
+            // penuh: Admin memang pemilik halaman publik.
             self::Admin => [
                 PanelPermission::AccessAdminPanel,
                 PanelPermission::ManageSiteSettings,
                 PanelPermission::ManageHomepage,
                 ...PanelPermission::locationCases(),
+                ...PanelPermission::locationPageCases(),
             ],
 
             /*
-             | Operator bekerja pada data gerobak sehari-hari: melihat,
-             | membuat draft, memperbarui informasi, dan mengelola foto.
+             | Operator bekerja pada MASTER DATA gerobak sehari-hari: melihat,
+             | menambah, memperbarui informasi, dan mengelola foto.
              |
-             | SENGAJA TIDAK diberikan: manage_location_areas, publish_locations,
-             | change_location_slugs, dan delete_locations. Keempatnya mengubah
-             | URL publik atau menghapus data, jadi tetap menjadi kewenangan
-             | Admin dan Super Admin.
+             | SENGAJA TIDAK diberikan: manage_location_areas, delete_locations,
+             | dan SELURUH permission Halaman Slug Lokasi. Halaman slug adalah
+             | wajah publik DIMDUM -- membuat, menerbitkan, menghapus, dan
+             | mengganti slug-nya tetap menjadi kewenangan Admin dan Super
+             | Admin. Operator tetap dapat mengubah data gerobak yang tampil
+             | di halaman itu, karena itu memang tugasnya.
              */
             self::Operator => [
                 PanelPermission::AccessAdminPanel,

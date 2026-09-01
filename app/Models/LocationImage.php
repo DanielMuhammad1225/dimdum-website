@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\LocationCatalogService;
+use App\Services\LocationPageCatalogService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -54,10 +54,10 @@ class LocationImage extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => LocationCatalogService::flushCache());
-        static::deleted(fn () => LocationCatalogService::flushCache());
-        static::restored(fn () => LocationCatalogService::flushCache());
-        static::forceDeleted(fn () => LocationCatalogService::flushCache());
+        static::saved(fn () => LocationPageCatalogService::flushCache());
+        static::deleted(fn () => LocationPageCatalogService::flushCache());
+        static::restored(fn () => LocationPageCatalogService::flushCache());
+        static::forceDeleted(fn () => LocationPageCatalogService::flushCache());
     }
 
     public function location(): BelongsTo

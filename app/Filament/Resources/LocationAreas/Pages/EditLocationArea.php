@@ -4,15 +4,12 @@ namespace App\Filament\Resources\LocationAreas\Pages;
 
 use App\Filament\Resources\LocationAreas\LocationAreaResource;
 use App\Models\LocationArea;
-use App\Services\LocationAreaSlugService;
 use App\Services\LocationOrderingService;
-use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Model;
 
 class EditLocationArea extends EditRecord
@@ -39,33 +36,9 @@ class EditLocationArea extends EditRecord
         return $data;
     }
 
-    /**
-     * URL publik area, atau null bila rantai induknya belum tampil.
-     */
-    protected static function publicUrl(LocationArea $record): ?string
-    {
-        if (! $record->isPubliclyVisible()) {
-            return null;
-        }
-
-        $record->loadMissing('group.province');
-        $province = $record->group?->province;
-
-        return $province === null
-            ? null
-            : route('locations.area', [$province->slug, $record->slug]);
-    }
-
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('preview')
-                ->label('Lihat halaman')
-                ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
-                ->color('gray')
-                ->visible(fn (LocationArea $record): bool => self::publicUrl($record) !== null)
-                ->url(fn (LocationArea $record): string => (string) self::publicUrl($record), shouldOpenInNewTab: true),
-
             DeleteAction::make()
                 ->label('Hapus')
                 ->before(function (LocationArea $record, DeleteAction $action): void {
@@ -83,30 +56,12 @@ class EditLocationArea extends EditRecord
         ];
     }
 
-    /**
-     * Slug diperlakukan terpisah dari field biasa: penggantiannya berjalan
-     * dalam transaction dan mencatat redirect 301 bila halaman pernah terbit.
-     */
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         /** @var LocationArea $record */
-        $slugService = app(LocationAreaSlugService::class);
-
-        $requestedSlug = $data['slug'] ?? null;
-        $hasPublishedField = array_key_exists('published_at', $data);
-        $publishedAt = $data['published_at'] ?? null;
-
-        unset($data['slug'], $data['published_at']);
-
-        // Dicatat SEBELUM fill(), supaya perpindahan grup masih terdeteksi.
         $previousGroupId = (int) $record->location_group_id;
 
         $record->fill([...$data, 'updated_by' => auth()->id()]);
-
-        if ($hasPublishedField) {
-            $record->published_at = $publishedAt;
-        }
-
         $record->save();
 
         // Pindah Kota/Grup = pindah scope urutan.
@@ -118,20 +73,6 @@ class EditLocationArea extends EditRecord
             );
         }
 
-        if (is_string($requestedSlug) && $requestedSlug !== '') {
-            $wasPublished = $record->hasEverBeenPublished();
-            $previousSlug = $record->slug;
-
-            if ($slugService->apply($record, $requestedSlug, auth()->id()) && $wasPublished) {
-                Notification::make()
-                    ->warning()
-                    ->title('URL area berubah')
-                    ->body("Alamat lama .../{$previousSlug} kini dialihkan permanen ke .../{$record->slug}. Perbarui tautan di iklan yang sedang berjalan.")
-                    ->persistent()
-                    ->send();
-            }
-        }
-
         return $record;
     }
 
@@ -140,12 +81,11 @@ class EditLocationArea extends EditRecord
         /** @var LocationArea $record */
         $record = $this->getRecord();
 
-        // Halaman terbit tanpa gerobak tampil bukan tujuan iklan yang baik.
-        if ($record->isPubliclyVisible() && ! $record->locations()->publiclyVisible()->exists()) {
+        if (! $record->is_active) {
             Notification::make()
                 ->warning()
-                ->title('Area ini belum punya gerobak yang tampil')
-                ->body('Halaman tetap dapat diakses, tetapi pengunjung hanya melihat pesan "sedang diperbarui". Sebaiknya belum dipakai sebagai tujuan iklan.')
+                ->title('Area ini nonaktif')
+                ->body('Gerobak di bawahnya berhenti tampil pada Halaman Slug Lokasi mana pun sampai area diaktifkan kembali.')
                 ->persistent()
                 ->send();
         }

@@ -5,7 +5,6 @@ namespace App\Filament\Resources\LocationGroups\Pages;
 use App\Filament\Resources\LocationGroups\LocationGroupResource;
 use App\Models\LocationGroup;
 use App\Services\LocationOrderingService;
-use App\Services\LocationProvinceSlugService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
@@ -35,6 +34,14 @@ class EditLocationGroup extends EditRecord
                         $action->failure();
                         $action->halt();
                     }
+
+                    if ($record->pages()->exists()) {
+                        $action->failureNotificationTitle(
+                            'Kota/Grup ini masih dipakai sebagai cakupan Halaman Slug Lokasi. Lepas dulu dari halamannya.'
+                        );
+                        $action->failure();
+                        $action->halt();
+                    }
                 }),
 
             RestoreAction::make()->label('Pulihkan'),
@@ -45,34 +52,10 @@ class EditLocationGroup extends EditRecord
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
         /** @var LocationGroup $record */
-        $slugService = app(LocationProvinceSlugService::class);
-
-        $requestedSlug = $data['slug'] ?? null;
-        unset($data['slug']);
-
-        /*
-         | Memindahkan grup ke provinsi lain memindahkan SELURUH area di
-         | bawahnya sekaligus, sehingga URL-nya ikut berubah. Peringatannya
-         | disampaikan setelah simpan; pencegahannya ada di tingkat Area,
-         | tempat aturan "pernah terbit tidak boleh lintas provinsi" berlaku.
-         */
         $previousProvinceId = (int) $record->province_id;
 
         $record->fill([...$data, 'updated_by' => auth()->id()]);
         $record->save();
-
-        if (is_string($requestedSlug) && $requestedSlug !== '') {
-            $slug = $slugService->uniqueGroupSlug(
-                (int) $record->province_id,
-                $requestedSlug,
-                $record->getKey(),
-            );
-
-            if ($slug !== $record->slug) {
-                $record->slug = $slug;
-                $record->save();
-            }
-        }
 
         // Pindah provinsi = pindah scope urutan.
         if ($previousProvinceId !== (int) $record->province_id) {
@@ -83,16 +66,26 @@ class EditLocationGroup extends EditRecord
             );
         }
 
-        if ($previousProvinceId !== (int) $record->province_id && $record->areas()->exists()) {
+        return $record;
+    }
+
+    protected function afterSave(): void
+    {
+        /** @var LocationGroup $record */
+        $record = $this->getRecord();
+
+        /*
+         | Grup nonaktif memutus rantai visibilitas gerobak di bawahnya, dan
+         | halaman slug yang memakainya bisa mendadak kosong. Admin diberi
+         | tahu -- bukan dibiarkan menemukannya sendiri.
+         */
+        if (! $record->is_active && $record->pages()->exists()) {
             Notification::make()
                 ->warning()
-                ->title('Grup berpindah provinsi')
-                ->body('Seluruh Area di bawah grup ini ikut berpindah, sehingga URL publiknya berubah. '
-                    .'Periksa kembali tautan iklan yang sedang berjalan.')
+                ->title('Kota/Grup ini nonaktif')
+                ->body('Gerobak di bawahnya berhenti tampil pada Halaman Slug Lokasi yang memakainya sampai grup diaktifkan kembali.')
                 ->persistent()
                 ->send();
         }
-
-        return $record;
     }
 }

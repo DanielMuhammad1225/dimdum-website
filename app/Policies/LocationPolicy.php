@@ -50,16 +50,6 @@ class LocationPolicy
         return $user->can(PanelPermission::DeleteLocations->value);
     }
 
-    public function publish(User $user, Location $location): bool
-    {
-        return $user->can(PanelPermission::PublishLocations->value);
-    }
-
-    public function changeSlug(User $user, Location $location): bool
-    {
-        return $user->can(PanelPermission::ChangeLocationSlugs->value);
-    }
-
     public function manageMedia(User $user, Location $location): bool
     {
         return $user->can(PanelPermission::ManageLocationMedia->value);

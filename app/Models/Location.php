@@ -2,18 +2,21 @@
 
 namespace App\Models;
 
-use App\Services\LocationCatalogService;
+use App\Services\LocationPageCatalogService;
 use App\Support\MapsUrl;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use Illuminate\Support\Carbon;
 
 /**
  * Gerobak DIMDUM -- titik fisik, tingkat terbawah hierarki.
+ *
+ * MASTER DATA. Gerobak tidak punya slug maupun halaman sendiri; ia TAMPIL di
+ * Halaman Slug Lokasi yang memilihnya secara eksplisit.
  *
  * Induknya adalah Area. Kota/Grup dan Provinsi diturunkan lewat rantai
  * Location -> LocationArea -> LocationGroup -> Province dan tidak pernah
@@ -23,10 +26,6 @@ use Illuminate\Support\Carbon;
  * merupakan fakta pos, bukan hierarki. Satu Kota/Grup bertipe pemasaran boleh
  * mencakup beberapa kota/kabupaten, jadi alamat sungguhan tidak selalu bisa
  * disimpulkan dari nama induk.
- *
- * Slug sudah disimpan dan unik per area supaya route detail
- * /lokasi/{province}/{area}/{location} bisa ditambahkan nanti. Route itu
- * SENGAJA belum ada pada fase ini.
  */
 class Location extends Model
 {
@@ -34,10 +33,6 @@ class Location extends Model
     use SoftDeletes;
 
     /**
-     * slug dan published_at tidak fillable: keduanya butuh permission khusus
-     * (change_location_slugs / publish_locations) dan diatur lewat jalur
-     * tersendiri, bukan mass assignment.
-     *
      * @var list<string>
      */
     protected $fillable = [
@@ -67,7 +62,6 @@ class Location extends Model
     {
         return [
             'is_active' => 'boolean',
-            'published_at' => 'datetime',
             'sort_order' => 'integer',
             // string, bukan float: presisi koordinat harus utuh apa adanya.
             'latitude' => 'decimal:7',
@@ -77,10 +71,10 @@ class Location extends Model
 
     protected static function booted(): void
     {
-        static::saved(fn () => LocationCatalogService::flushCache());
-        static::deleted(fn () => LocationCatalogService::flushCache());
-        static::restored(fn () => LocationCatalogService::flushCache());
-        static::forceDeleted(fn () => LocationCatalogService::flushCache());
+        static::saved(fn () => LocationPageCatalogService::flushCache());
+        static::deleted(fn () => LocationPageCatalogService::flushCache());
+        static::restored(fn () => LocationPageCatalogService::flushCache());
+        static::forceDeleted(fn () => LocationPageCatalogService::flushCache());
     }
 
     // --------------------------------------------------------- relationships
@@ -90,9 +84,23 @@ class Location extends Model
         return $this->belongsTo(LocationArea::class, 'location_area_id');
     }
 
+    /**
+     * Foto gerobak, SELALU dengan foto utama lebih dulu.
+     *
+     * Urutannya melekat pada relasi supaya eager load di jalur mana pun --
+     * halaman publik, admin, structured data -- menghasilkan urutan yang sama.
+     */
     public function images(): HasMany
     {
-        return $this->hasMany(LocationImage::class);
+        return $this->hasMany(LocationImage::class)->ordered();
+    }
+
+    /**
+     * Halaman slug yang menampilkan gerobak ini.
+     */
+    public function pages(): BelongsToMany
+    {
+        return $this->belongsToMany(LocationPage::class, 'location_page_location')->withTimestamps();
     }
 
     public function createdBy(): BelongsTo
@@ -129,27 +137,15 @@ class Location extends Model
         return $query->where($query->qualifyColumn('is_active'), true);
     }
 
-    public function scopePublished(Builder $query): Builder
-    {
-        return $query
-            ->whereNotNull($query->qualifyColumn('published_at'))
-            ->where($query->qualifyColumn('published_at'), '<=', now());
-    }
-
-    public function scopePubliclyVisible(Builder $query): Builder
-    {
-        return $query->active()->published();
-    }
-
     /**
-     * Visibilitas EFEKTIF: gerobak baru tampil bila SELURUH leluhurnya juga
-     * tampil -- Area terbit, Kota/Grup aktif, dan Provinsi terbit. Gerobak
-     * aktif di bawah induk tersembunyi tidak boleh bocor.
+     * Visibilitas EFEKTIF: gerobak baru boleh tampil bila SELURUH leluhurnya
+     * juga aktif -- Area, Kota/Grup, dan Provinsi. Gerobak aktif di bawah
+     * induk nonaktif tidak boleh bocor ke halaman mana pun.
      */
     public function scopeEffectivelyVisible(Builder $query): Builder
     {
         return $query
-            ->publiclyVisible()
+            ->active()
             ->whereHas('area', fn (Builder $area) => $area->effectivelyVisible());
     }
 
@@ -161,15 +157,31 @@ class Location extends Model
             ->orderBy($query->qualifyColumn('id'));
     }
 
-    // ------------------------------------------------------------ visibility
-
-    public function isPubliclyVisible(): bool
+    /**
+     * Gerobak yang berada di bawah salah satu Kota/Grup tertentu.
+     *
+     * Inilah rumus kelayakan kandidat halaman slug:
+     * location.area.location_group_id termasuk dalam Kota/Grup halaman.
+     *
+     * @param  list<int>  $groupIds
+     */
+    public function scopeInGroups(Builder $query, array $groupIds): Builder
     {
-        if ($this->trashed() || ! $this->is_active) {
-            return false;
+        if ($groupIds === []) {
+            return $query->whereRaw('1 = 0');
         }
 
-        return $this->published_at instanceof Carbon && ! $this->published_at->isFuture();
+        return $query->whereHas(
+            'area',
+            fn (Builder $area) => $area->whereIn($area->qualifyColumn('location_group_id'), $groupIds)
+        );
+    }
+
+    // ------------------------------------------------------------ visibility
+
+    public function isActiveLocation(): bool
+    {
+        return ! $this->trashed() && (bool) $this->is_active;
     }
 
     /**
@@ -178,16 +190,11 @@ class Location extends Model
      */
     public function isEffectivelyVisible(): bool
     {
-        if (! $this->isPubliclyVisible()) {
+        if (! $this->isActiveLocation()) {
             return false;
         }
 
         return $this->area?->isEffectivelyVisible() ?? false;
-    }
-
-    public function hasEverBeenPublished(): bool
-    {
-        return $this->published_at !== null;
     }
 
     // ------------------------------------------------------------- accessors

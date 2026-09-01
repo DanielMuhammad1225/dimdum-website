@@ -4,14 +4,11 @@ namespace App\Filament\Resources\Provinces\Pages;
 
 use App\Filament\Resources\Provinces\ProvinceResource;
 use App\Models\Province;
-use App\Services\LocationProvinceSlugService;
-use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ForceDeleteAction;
 use Filament\Actions\RestoreAction;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\EditRecord;
-use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Model;
 
 class EditProvince extends EditRecord
@@ -26,13 +23,6 @@ class EditProvince extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('preview')
-                ->label('Lihat halaman')
-                ->icon(Heroicon::OutlinedArrowTopRightOnSquare)
-                ->color('gray')
-                ->visible(fn (Province $record): bool => $record->isPubliclyVisible())
-                ->url(fn (Province $record): string => route('locations.province', $record->slug), shouldOpenInNewTab: true),
-
             DeleteAction::make()
                 ->label('Hapus')
                 ->before(function (Province $record, DeleteAction $action): void {
@@ -50,43 +40,10 @@ class EditProvince extends EditRecord
         ];
     }
 
-    /**
-     * Slug diperlakukan terpisah dari field biasa: penggantiannya berjalan
-     * dalam transaction dan mencatat redirect 301 bila halaman pernah terbit.
-     */
     protected function handleRecordUpdate(Model $record, array $data): Model
     {
-        /** @var Province $record */
-        $slugService = app(LocationProvinceSlugService::class);
-
-        $requestedSlug = $data['slug'] ?? null;
-        $hasPublishedField = array_key_exists('published_at', $data);
-        $publishedAt = $data['published_at'] ?? null;
-
-        unset($data['slug'], $data['published_at']);
-
         $record->fill([...$data, 'updated_by' => auth()->id()]);
-
-        if ($hasPublishedField) {
-            $record->published_at = $publishedAt;
-        }
-
         $record->save();
-
-        if (is_string($requestedSlug) && $requestedSlug !== '') {
-            $wasPublished = $record->hasEverBeenPublished();
-            $previousSlug = $record->slug;
-
-            if ($slugService->apply($record, $requestedSlug, auth()->id()) && $wasPublished) {
-                Notification::make()
-                    ->warning()
-                    ->title('URL provinsi berubah')
-                    ->body("Alamat lama /lokasi/{$previousSlug} kini dialihkan permanen ke /lokasi/{$record->slug}. "
-                        .'URL seluruh area di bawahnya ikut berubah. Perbarui tautan di iklan yang sedang berjalan.')
-                    ->persistent()
-                    ->send();
-            }
-        }
 
         return $record;
     }
@@ -96,12 +53,16 @@ class EditProvince extends EditRecord
         /** @var Province $record */
         $record = $this->getRecord();
 
-        // Provinsi terbit tanpa grup aktif bukan tujuan iklan yang baik.
-        if ($record->isPubliclyVisible() && ! $record->groups()->active()->exists()) {
+        /*
+         | Menonaktifkan provinsi memutus rantai visibilitas seluruh gerobak di
+         | bawahnya. Halaman slug yang memakainya bisa mendadak kosong, jadi
+         | admin diberi tahu -- bukan dibiarkan menemukannya sendiri.
+         */
+        if (! $record->is_active) {
             Notification::make()
                 ->warning()
-                ->title('Provinsi ini belum punya Kota/Grup aktif')
-                ->body('Halaman tetap dapat diakses, tetapi pengunjung hanya melihat pesan "sedang disiapkan". Sebaiknya belum dipakai sebagai tujuan iklan.')
+                ->title('Provinsi ini nonaktif')
+                ->body('Seluruh gerobak di bawahnya berhenti tampil pada Halaman Slug Lokasi mana pun sampai provinsi diaktifkan kembali.')
                 ->persistent()
                 ->send();
         }

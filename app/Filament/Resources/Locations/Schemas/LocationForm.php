@@ -9,11 +9,9 @@ use App\Models\LocationArea;
 use App\Models\LocationGroup;
 use App\Models\Province;
 use App\Services\ImageMetadata;
-use App\Services\LocationAreaSlugService;
 use App\Services\LocationHierarchyService;
 use App\Support\MapsUrl;
 use App\Support\WhatsAppNumber;
-use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
@@ -39,7 +37,7 @@ class LocationForm
                         Tabs\Tab::make('Alamat')->schema(self::addressFields()),
                         Tabs\Tab::make('Peta & Kontak')->schema(self::mapFields()),
                         Tabs\Tab::make('Foto')->schema(self::mediaFields()),
-                        Tabs\Tab::make('Publikasi')->schema(self::publicationFields()),
+                        Tabs\Tab::make('Status')->schema(self::publicationFields()),
                     ]),
             ]);
     }
@@ -117,8 +115,8 @@ class LocationForm
                 ->required()
                 ->native(false)
                 ->exists('location_areas', 'id')
-                ->rule(function (Get $get): callable {
-                    return function (string $attribute, mixed $value, callable $fail) use ($get): void {
+                ->rule(function (Get $get, ?Location $record): callable {
+                    return function (string $attribute, mixed $value, callable $fail) use ($get, $record): void {
                         $areaId = $value === null ? null : (int) $value;
 
                         if ($areaId === null) {
@@ -147,6 +145,22 @@ class LocationForm
                         if ($provinceId !== null && $provinceId !== ''
                             && ! $hierarchy->groupBelongsToProvince((int) $area->location_group_id, (int) $provinceId)) {
                             $fail('Area yang dipilih tidak berada di provinsi tersebut.');
+
+                            return;
+                        }
+
+                        /*
+                         | Memindahkan gerobak keluar dari cakupan Halaman Slug
+                         | Lokasi yang memilihnya akan mengurangi isi halaman
+                         | itu diam-diam. Kasus itu diblokir, bukan dibiarkan.
+                         */
+                        $reason = $hierarchy->rejectionReasonForLocationMove(
+                            $record ?? new Location,
+                            $areaId,
+                        );
+
+                        if ($reason !== null) {
+                            $fail($reason);
                         }
                     };
                 }),
@@ -155,24 +169,7 @@ class LocationForm
                 ->label('Nama gerobak')
                 ->placeholder('Contoh: Gerobak Depan Pasar')
                 ->required()
-                ->maxLength(150)
-                ->live(onBlur: true)
-                ->afterStateUpdated(function (Get $get, Set $set, ?string $state): void {
-                    if (blank($get('slug')) && filled($state)) {
-                        $set('slug', Str::slug($state));
-                    }
-                }),
-
-            TextInput::make('slug')
-                ->label('Slug')
-                ->helperText('Dipakai untuk halaman detail gerobak yang akan dibuat pada fase berikutnya. Harus unik di dalam satu Area.')
-                ->maxLength(180)
-                ->disabled(fn (): bool => ! self::canChangeSlug())
-                ->dehydrated(fn (): bool => self::canChangeSlug())
-                ->rule('regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/')
-                ->validationMessages([
-                    'regex' => 'Slug hanya boleh huruf kecil, angka, dan tanda hubung.',
-                ]),
+                ->maxLength(150),
 
         ];
     }
@@ -340,27 +337,15 @@ class LocationForm
         return [
             Toggle::make('is_active')
                 ->label('Aktif')
-                ->helperText('Gerobak nonaktif tidak tampil di halaman wilayah.')
-                ->disabled(fn (): bool => ! self::canPublish())
-                ->dehydrated(fn (): bool => self::canPublish()),
-
-            DateTimePicker::make('published_at')
-                ->label('Waktu terbit')
-                ->helperText('Kosong berarti draft. Gerobak baru tampil bila wilayahnya juga sudah terbit.')
-                ->seconds(false)
-                ->disabled(fn (): bool => ! self::canPublish())
-                ->dehydrated(fn (): bool => self::canPublish()),
+                ->helperText('Status operasional gerobak. Gerobak nonaktif berhenti tampil pada Halaman Slug Lokasi yang memilihnya, tanpa dilepas dari halaman itu.')
+                ->disabled(fn (): bool => ! self::canUpdate())
+                ->dehydrated(fn (): bool => self::canUpdate()),
         ];
     }
 
-    protected static function canChangeSlug(): bool
+    protected static function canUpdate(): bool
     {
-        return auth()->user()?->can(PanelPermission::ChangeLocationSlugs->value) ?? false;
-    }
-
-    protected static function canPublish(): bool
-    {
-        return auth()->user()?->can(PanelPermission::PublishLocations->value) ?? false;
+        return auth()->user()?->can(PanelPermission::UpdateLocations->value) ?? false;
     }
 
     protected static function canManageMedia(): bool
@@ -389,20 +374,6 @@ class LocationForm
             'size_bytes' => $metadata['size_bytes'] ?? 0,
             'created_by' => $data['created_by'] ?? auth()->id(),
         ];
-    }
-
-    /**
-     * Slug unik dalam wilayah, dipakai halaman Create dan Edit.
-     */
-    public static function resolveSlug(?string $desired, ?string $name, int $areaId, ?Location $record = null): string
-    {
-        $service = app(LocationAreaSlugService::class);
-
-        return $service->uniqueLocationSlug(
-            $areaId,
-            $desired !== null && $desired !== '' ? $desired : (string) $name,
-            $record?->getKey(),
-        );
     }
 
     /**
