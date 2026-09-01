@@ -92,6 +92,15 @@ return [
         ],
         'fallback_price_note' => 'Dijual satuan',
         'note' => 'Ketersediaan varian bisa berbeda di setiap gerobak.',
+        /*
+        | Ditampilkan hanya bila 'items' kosong. Pada fase produk dinamis,
+        | 'items' berasal dari database dan empty state inilah yang tampil
+        | selama datanya belum diisi.
+        */
+        'empty_state' => [
+            'title' => 'Daftar varian segera hadir',
+            'description' => 'Pilihan dimsum DIMDUM sedang kami siapkan dan akan tampil di halaman ini.',
+        ],
     ],
 
     'how' => [

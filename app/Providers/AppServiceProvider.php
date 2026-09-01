@@ -14,7 +14,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        /*
+         | HomepageContentService dan SiteSettingsService sengaja TIDAK
+         | didaftarkan sebagai singleton/scoped.
+         |
+         | Keduanya memoize hasil bacaannya di dalam instance. HomeController
+         | menerima satu instance lewat constructor, jadi satu render halaman
+         | tetap hanya menghasilkan satu query per singleton. Membuatnya
+         | shared justru berbahaya: instance yang sama akan menyimpan data
+         | lama setelah admin menyimpan perubahan.
+         */
     }
 
     /**
