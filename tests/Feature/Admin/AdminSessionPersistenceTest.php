@@ -72,19 +72,21 @@ class AdminSessionPersistenceTest extends TestCase
         }
     }
 
-    public function test_the_logout_route_is_never_reached_by_a_plain_page_load(): void
+    /**
+     * Logout hanya boleh terjadi lewat POST yang disengaja.
+     *
+     * Selama route logout tidak menerima GET, tidak ada navigasi biasa --
+     * termasuk redirect yang salah arah -- yang bisa mengakhiri session.
+     */
+    public function test_the_logout_route_cannot_be_triggered_by_navigation(): void
     {
-        $user = $this->superAdmin();
+        $route = Route::getRoutes()->getByName('filament.admin.auth.logout');
 
-        $logoutHits = 0;
+        $this->assertNotNull($route, 'Route logout panel tidak ditemukan.');
+        $this->assertSame(['POST'], array_values(array_diff($route->methods(), ['HEAD'])));
 
-        // Route logout Filament dipantau: bila sebuah GET biasa sampai ke
-        // sini, itulah penyebab logout -- bukan tebakan.
-        Route::getRoutes()->refreshNameLookups();
+        $this->actingAs($this->superAdmin())->get('/admin/provinsi/create')->assertOk();
 
-        $this->actingAs($user)->get('/admin/provinsi/create')->assertOk();
-
-        $this->assertSame(0, $logoutHits);
         $this->assertTrue(auth()->check());
     }
 }
