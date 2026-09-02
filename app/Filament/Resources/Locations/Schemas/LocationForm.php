@@ -7,6 +7,7 @@ use App\Filament\Support\UploadedImage;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationGroup;
+use App\Models\LocationImage;
 use App\Models\Province;
 use App\Services\ImageMetadata;
 use App\Services\LocationHierarchyService;
@@ -282,8 +283,19 @@ class LocationForm
         return [
             Repeater::make('images')
                 ->label('Foto gerobak')
-                ->helperText('JPG, PNG, atau WebP. Maksimal 3 MB per foto. Geser untuk mengubah urutan tampil.')
+                ->helperText('Opsional. JPG, PNG, atau WebP, maksimal 3 MB per foto. Geser untuk mengubah urutan tampil.')
                 ->relationship()
+                /*
+                 | defaultItems(0), BUKAN bawaan Filament yang 1.
+                 |
+                 | Repeater membuka satu item kosong secara bawaan, dan item
+                 | itu mewajibkan berkas serta alt text -- sehingga gerobak
+                 | tanpa foto mustahil disimpan. Banyak gerobak didaftarkan
+                 | lebih dulu di lapangan dan fotonya menyusul, jadi galeri
+                 | harus benar-benar opsional.
+                 */
+                ->defaultItems(0)
+                ->addActionLabel('Tambah foto')
                 ->orderColumn('sort_order')
                 ->reorderable()
                 ->collapsible()
@@ -307,15 +319,23 @@ class LocationForm
                      | slug yang bisa diubah admin, dan penghapusan satu foto
                      | tidak mungkin menyentuh berkas gerobak lain.
                      */
+                    /*
+                     | Wajib hanya untuk baris BARU. Baris lama yang berkasnya
+                     | hilang dari disk ter-hidrasi kosong, dan menuntutnya di
+                     | sini akan mengunci admin dari menyimpan gerobak itu
+                     | sama sekali.
+                     */
                     UploadedImage::locationGallery(
                         'image_path',
                         UploadedImage::locationDirectory((string) Str::ulid()),
-                    )->required(),
+                    )->required(fn (?LocationImage $record): bool => $record === null),
 
                     TextInput::make('alt_text')
                         ->label('Teks alternatif (alt)')
-                        ->helperText('Wajib. Deskripsi singkat isi foto untuk pembaca layar.')
-                        ->required()
+                        // Wajib hanya bila fotonya memang ada -- baris tanpa
+                        // berkas tidak perlu dideskripsikan.
+                        ->helperText('Deskripsi singkat isi foto untuk pembaca layar. Wajib bila foto diunggah.')
+                        ->required(fn (Get $get): bool => filled($get('image_path')))
                         ->maxLength(255),
 
                     TextInput::make('caption')

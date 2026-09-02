@@ -7,6 +7,7 @@ use App\Services\ImageMetadata;
 use App\Services\LocationOrderingService;
 use App\Services\LocationPageScopeService;
 use App\Services\LocationPageSlugService;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -67,6 +68,30 @@ class CreateLocationPage extends CreateRecord
         });
 
         return $record;
+    }
+
+    /**
+     * Halaman yang tersimpan tetapi belum bisa dibuka pengunjung harus
+     * mengatakannya sendiri.
+     *
+     * Menyalakan "Aktif" tanpa mengisi "Waktu terbit" menghasilkan halaman
+     * yang terasa selesai tetapi URL-nya 404. Tanpa pemberitahuan ini,
+     * satu-satunya cara mengetahuinya adalah membuka URL-nya dan bingung.
+     */
+    protected function afterCreate(): void
+    {
+        $issue = $this->getRecord()->publicVisibilityIssue();
+
+        if ($issue === null) {
+            return;
+        }
+
+        Notification::make()
+            ->warning()
+            ->title('Halaman belum dapat dibuka pengunjung')
+            ->body($issue)
+            ->persistent()
+            ->send();
     }
 
     /**

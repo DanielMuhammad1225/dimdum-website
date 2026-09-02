@@ -9,6 +9,7 @@ use App\Services\LocationPageScopeService;
 use App\Services\LocationPageSlugService;
 use App\Support\SafeUrl;
 use Filament\Forms\Components\DateTimePicker;
+use Filament\Forms\Components\Placeholder;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -18,6 +19,7 @@ use Filament\Schemas\Components\Tabs;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
 
 /**
@@ -306,15 +308,29 @@ class LocationPageForm
     protected static function publicationFields(): array
     {
         return [
+            /*
+             | Status EFEKTIF disebutkan lebih dulu, sebelum saklarnya.
+             |
+             | "Aktif" saja tidak membuat halaman terbuka -- waktu terbit juga
+             | harus terisi. Tanpa keterangan ini, admin yang sudah menyalakan
+             | Aktif wajar menyimpulkan halamannya hidup, lalu menemukan 404
+             | tanpa petunjuk apa pun.
+             */
+            Placeholder::make('public_status')
+                ->label('Status publik')
+                ->content(fn (?LocationPage $record): HtmlString => new HtmlString(
+                    self::publicStatusText($record),
+                )),
+
             Toggle::make('is_active')
                 ->label('Aktif')
-                ->helperText('Nonaktif membuat halaman menjadi 404, termasuk untuk slug lamanya.')
+                ->helperText('Saklar utama. Halaman tetap belum terbuka sampai "Waktu terbit" di bawah juga terisi.')
                 ->disabled(fn (): bool => ! self::canPublish())
                 ->dehydrated(fn (): bool => self::canPublish()),
 
             DateTimePicker::make('published_at')
                 ->label('Waktu terbit')
-                ->helperText('Kosong berarti masih draft. Waktu di masa depan membuat halaman belum tampil.')
+                ->helperText('WAJIB diisi agar halaman dapat dibuka pengunjung. Kosong berarti masih DRAFT dan URL-nya menghasilkan 404. Waktu di masa depan berarti terjadwal.')
                 ->seconds(false)
                 ->disabled(fn (): bool => ! self::canPublish())
                 ->dehydrated(fn (): bool => self::canPublish()),
@@ -323,6 +339,26 @@ class LocationPageForm
                 ->label('Sorot di homepage')
                 ->helperText('Halaman sorotan tampil lebih dulu pada daftar lokasi di homepage.'),
         ];
+    }
+
+    /**
+     * Keterangan status publik beserta URL yang dituju.
+     */
+    protected static function publicStatusText(?LocationPage $record): string
+    {
+        if ($record === null) {
+            return 'Halaman baru tersimpan sebagai DRAFT. Isi "Waktu terbit" di bawah agar dapat dibuka pengunjung.';
+        }
+
+        $url = url('/alamat/'.$record->slug);
+        $issue = $record->publicVisibilityIssue();
+
+        if ($issue === null) {
+            return 'TERBIT &mdash; dapat dibuka di <a href="'.e($url)
+                .'" target="_blank" rel="noopener noreferrer" class="underline">'.e($url).'</a>';
+        }
+
+        return 'BELUM TERBIT &mdash; '.e($issue).'<br>Alamat yang dituju nanti: '.e($url);
     }
 
     protected static function slugHelper(?LocationPage $record): string

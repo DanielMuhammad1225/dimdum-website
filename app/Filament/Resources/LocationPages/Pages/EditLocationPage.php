@@ -139,6 +139,24 @@ class EditLocationPage extends EditRecord
         $record = $this->getRecord();
 
         /*
+         | Halaman yang belum bisa dibuka pengunjung menyebutkan sebabnya.
+         | "Aktif" saja tidak cukup: tanpa waktu terbit, URL-nya 404 dan
+         | admin tidak punya satu pun petunjuk tentang alasannya.
+         */
+        $issue = $record->publicVisibilityIssue();
+
+        if ($issue !== null) {
+            Notification::make()
+                ->warning()
+                ->title('Halaman belum dapat dibuka pengunjung')
+                ->body($issue)
+                ->persistent()
+                ->send();
+
+            return;
+        }
+
+        /*
          | Halaman terbit tanpa satu pun gerobak yang benar-benar tampil akan
          | menyajikan empty state kepada pengunjung iklan. Kasusnya disebutkan,
          | bukan dibiarkan ditemukan sendiri.

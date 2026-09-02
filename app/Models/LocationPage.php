@@ -219,6 +219,42 @@ class LocationPage extends Model
         return $this->published_at !== null;
     }
 
+    /**
+     * Alasan halaman ini BELUM terlihat pengunjung, atau null bila sudah.
+     *
+     * Dipakai admin panel supaya "kenapa URL saya 404" terjawab di tempat
+     * kejadian, bukan ditebak. Aturannya tidak berbeda dari
+     * isPubliclyVisible() -- hanya diperiksa satu per satu agar bisa
+     * disebutkan sebabnya.
+     */
+    public function publicVisibilityIssue(): ?string
+    {
+        if ($this->trashed()) {
+            return 'Halaman ini sudah dihapus, jadi URL-nya menghasilkan 404.';
+        }
+
+        if (! $this->is_active) {
+            return 'Halaman ini NONAKTIF, jadi URL-nya menghasilkan 404. Aktifkan pada tab Publikasi.';
+        }
+
+        if (! $this->published_at instanceof Carbon) {
+            return 'Halaman ini masih DRAFT: kolom "Waktu terbit" belum diisi, jadi URL-nya menghasilkan 404. '
+                .'Isi waktu terbit pada tab Publikasi agar halaman dapat dibuka pengunjung.';
+        }
+
+        if ($this->published_at->isFuture()) {
+            return 'Halaman ini DIJADWALKAN terbit pada '.$this->published_at->translatedFormat('d F Y H:i')
+                .'. Sampai waktu itu URL-nya masih menghasilkan 404.';
+        }
+
+        if (! $this->isWithinPeriod()) {
+            return 'Halaman ini berada DI LUAR PERIODE berlakunya, jadi URL-nya menghasilkan 404. '
+                .'Periksa tanggal mulai dan selesai pada tab Isi Halaman.';
+        }
+
+        return null;
+    }
+
     // ------------------------------------------------------------- accessors
 
     public function publicTitle(): string
