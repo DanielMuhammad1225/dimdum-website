@@ -162,7 +162,7 @@ class LocationOptionalImageTest extends TestCase
         $location = Location::factory()->for($this->area, 'area')
             ->create(['name' => 'Gerobak Polos']);
 
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $page->groups()->attach($this->area->location_group_id);
         $page->locations()->attach($location);
 
@@ -191,7 +191,7 @@ class LocationOptionalImageTest extends TestCase
             'alt_text' => 'Foto hilang',
         ]);
 
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $page->groups()->attach($this->area->location_group_id);
         $page->locations()->attach($location);
 

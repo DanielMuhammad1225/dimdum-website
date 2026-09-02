@@ -22,9 +22,8 @@ class CreateLocationPage extends CreateRecord
     }
 
     /**
-     * slug dan published_at tidak fillable, dan dua relasi pivot bukan kolom.
-     * Semuanya ditulis di sini setelah form lolos validasi dan permission-nya
-     * diperiksa.
+     * slug tidak fillable, dan dua relasi pivot bukan kolom. Semuanya ditulis
+     * di sini setelah form lolos validasi dan permission-nya diperiksa.
      */
     protected function handleRecordCreation(array $data): Model
     {
@@ -33,10 +32,9 @@ class CreateLocationPage extends CreateRecord
 
         $groupIds = array_map('intval', (array) ($data['group_ids'] ?? []));
         $locationIds = array_map('intval', (array) ($data['location_ids'] ?? []));
-        $publishedAt = $data['published_at'] ?? null;
         $slug = $slugService->uniqueSlug((string) ($data['slug'] ?? ''), $data['title'] ?? null);
 
-        unset($data['group_ids'], $data['location_ids'], $data['slug'], $data['published_at']);
+        unset($data['group_ids'], $data['location_ids'], $data['slug']);
 
         // Lapis terakhir: id di luar cakupan ditolak sebelum apa pun ditulis.
         $scope->assertLocationsWithinGroups($locationIds, $groupIds);
@@ -52,7 +50,6 @@ class CreateLocationPage extends CreateRecord
         ]);
 
         $record->slug = $slug;
-        $record->published_at = $publishedAt;
 
         /*
          | Urutan tidak pernah datang dari form: halaman baru selalu
@@ -74,9 +71,9 @@ class CreateLocationPage extends CreateRecord
      * Halaman yang tersimpan tetapi belum bisa dibuka pengunjung harus
      * mengatakannya sendiri.
      *
-     * Menyalakan "Aktif" tanpa mengisi "Waktu terbit" menghasilkan halaman
-     * yang terasa selesai tetapi URL-nya 404. Tanpa pemberitahuan ini,
-     * satu-satunya cara mengetahuinya adalah membuka URL-nya dan bingung.
+     * Kini hanya dua sebab yang mungkin: halamannya nonaktif, atau periode
+     * berlakunya belum/sudah lewat. Keduanya disebutkan supaya tidak perlu
+     * ditebak dengan membuka URL-nya.
      */
     protected function afterCreate(): void
     {

@@ -25,13 +25,13 @@ class PublicLocationPageTest extends TestCase
     use RefreshDatabase;
 
     /**
-     * Satu halaman terbit lengkap dengan cakupan dan isinya.
+     * Satu halaman aktif lengkap dengan cakupan dan isinya.
      *
      * @param  list<Location>  $locations
      */
-    protected function publishedPage(array $groups, array $locations, array $attributes = []): LocationPage
+    protected function visiblePage(array $groups, array $locations, array $attributes = []): LocationPage
     {
-        $page = LocationPage::factory()->published()->create($attributes);
+        $page = LocationPage::factory()->create($attributes);
 
         $page->groups()->attach(array_map(fn (LocationGroup $g): int => $g->getKey(), $groups));
         $page->locations()->attach(array_map(fn (Location $l): int => $l->getKey(), $locations));
@@ -46,14 +46,14 @@ class PublicLocationPageTest extends TestCase
 
     // ------------------------------------------------------------ rendering
 
-    public function test_a_published_page_renders(): void
+    public function test_an_active_page_renders(): void
     {
         $group = LocationGroup::factory()->create();
         $location = Location::factory()
             ->for(LocationArea::factory()->for($group, 'group'), 'area')
             ->create(['name' => 'Gerobak Pasar', 'full_address' => 'Jalan Uji Nomor 7']);
 
-        $page = $this->publishedPage([$group], [$location], [
+        $page = $this->visiblePage([$group], [$location], [
             'title' => 'Alamat Gerobak Cianjur',
             'short_description' => 'Titik gerobak yang sedang beroperasi.',
         ]);
@@ -71,16 +71,9 @@ class PublicLocationPageTest extends TestCase
         $this->get('/alamat/tidak-ada')->assertNotFound();
     }
 
-    public function test_a_draft_page_is_not_found(): void
+    public function test_a_page_whose_period_has_not_started_is_not_found(): void
     {
-        $page = LocationPage::factory()->create();
-
-        $this->get($this->url($page))->assertNotFound();
-    }
-
-    public function test_a_scheduled_page_is_not_found_until_its_time(): void
-    {
-        $page = LocationPage::factory()->scheduled()->create();
+        $page = LocationPage::factory()->upcoming()->create();
 
         $this->get($this->url($page))->assertNotFound();
     }
@@ -109,7 +102,7 @@ class PublicLocationPageTest extends TestCase
         $chosen = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Dipilih']);
         $ignored = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Diabaikan']);
 
-        $page = $this->publishedPage([$group], [$chosen]);
+        $page = $this->visiblePage([$group], [$chosen]);
 
         $this->get($this->url($page))
             ->assertOk()
@@ -127,7 +120,7 @@ class PublicLocationPageTest extends TestCase
         $first = Location::factory()->for($areaOne, 'area')->create(['name' => 'Gerobak Utara']);
         $second = Location::factory()->for($areaTwo, 'area')->create(['name' => 'Gerobak Selatan']);
 
-        $page = $this->publishedPage([$group], [$first, $second]);
+        $page = $this->visiblePage([$group], [$first, $second]);
 
         $this->get($this->url($page))
             ->assertOk()
@@ -149,7 +142,7 @@ class PublicLocationPageTest extends TestCase
             ->for(LocationArea::factory()->for($group, 'group'), 'area')
             ->create(['name' => 'Gerobak Pindah']);
 
-        $page = $this->publishedPage([$group], [$location]);
+        $page = $this->visiblePage([$group], [$location]);
 
         $this->get($this->url($page))->assertSee('Gerobak Pindah');
 
@@ -170,7 +163,7 @@ class PublicLocationPageTest extends TestCase
         $area = LocationArea::factory()->for($group, 'group')->create();
         $location = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Rantai']);
 
-        $page = $this->publishedPage([$group], [$location]);
+        $page = $this->visiblePage([$group], [$location]);
 
         foreach ([$province, $group, $area, $location] as $model) {
             $model->forceFill(['is_active' => false])->save();
@@ -185,7 +178,7 @@ class PublicLocationPageTest extends TestCase
 
     public function test_a_page_without_visible_locations_shows_a_safe_empty_state(): void
     {
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
 
         $this->get($this->url($page))
             ->assertOk()
@@ -202,7 +195,7 @@ class PublicLocationPageTest extends TestCase
         $location = Location::factory()
             ->for(LocationArea::factory()->for($group, 'group'), 'area')->create();
 
-        $page = $this->publishedPage([$group], [$location], ['slug' => 'alamat-lama']);
+        $page = $this->visiblePage([$group], [$location], ['slug' => 'alamat-lama']);
 
         app(LocationPageSlugService::class)->apply($page, 'alamat-baru');
 
@@ -220,7 +213,7 @@ class PublicLocationPageTest extends TestCase
 
     public function test_repeated_slug_changes_still_take_a_single_hop(): void
     {
-        $page = LocationPage::factory()->published()->create(['slug' => 'satu']);
+        $page = LocationPage::factory()->create(['slug' => 'satu']);
         $service = app(LocationPageSlugService::class);
 
         $service->apply($page, 'dua');
@@ -236,7 +229,7 @@ class PublicLocationPageTest extends TestCase
 
     public function test_returning_to_an_old_slug_removes_its_redirect(): void
     {
-        $page = LocationPage::factory()->published()->create(['slug' => 'awal']);
+        $page = LocationPage::factory()->create(['slug' => 'awal']);
         $service = app(LocationPageSlugService::class);
 
         $service->apply($page, 'baru');
@@ -250,9 +243,9 @@ class PublicLocationPageTest extends TestCase
         $this->get('/alamat/awal')->assertOk();
     }
 
-    public function test_an_old_slug_of_a_draft_page_is_not_found_instead_of_redirected(): void
+    public function test_an_old_slug_of_a_hidden_page_is_not_found_instead_of_redirected(): void
     {
-        $page = LocationPage::factory()->published()->create(['slug' => 'lama']);
+        $page = LocationPage::factory()->create(['slug' => 'lama']);
 
         app(LocationPageSlugService::class)->apply($page, 'baru');
 
@@ -296,7 +289,7 @@ class PublicLocationPageTest extends TestCase
             ->for(LocationArea::factory()->for($group, 'group'), 'area')
             ->create(['name' => 'Gerobak SEO']);
 
-        $page = $this->publishedPage([$group], [$location], [
+        $page = $this->visiblePage([$group], [$location], [
             'title' => 'Alamat Cianjur',
             'seo_description' => 'Deskripsi ringkas untuk mesin pencari.',
         ]);
@@ -313,7 +306,7 @@ class PublicLocationPageTest extends TestCase
 
     public function test_the_page_has_exactly_one_h1(): void
     {
-        $page = LocationPage::factory()->published()->create(['title' => 'Alamat Tunggal']);
+        $page = LocationPage::factory()->create(['title' => 'Alamat Tunggal']);
 
         $html = $this->get($this->url($page))->getContent();
 
@@ -326,7 +319,7 @@ class PublicLocationPageTest extends TestCase
      */
     public function test_ad_parameters_never_reach_the_canonical(): void
     {
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $canonical = route('location-pages.show', $page->slug);
 
         $html = $this->get($this->url($page).'?utm_source=meta&utm_medium=cpc&gclid=abc&fbclid=xyz')
@@ -347,14 +340,14 @@ class PublicLocationPageTest extends TestCase
         $location = Location::factory()
             ->for(LocationArea::factory()->for($group, 'group'), 'area')->create();
 
-        $listed = $this->publishedPage([$group], [$location], ['slug' => 'masuk-sitemap']);
-        $draft = LocationPage::factory()->create(['slug' => 'masih-draft']);
-        $empty = LocationPage::factory()->published()->create(['slug' => 'tanpa-gerobak']);
+        $listed = $this->visiblePage([$group], [$location], ['slug' => 'masuk-sitemap']);
+        $hidden = LocationPage::factory()->inactive()->create(['slug' => 'nonaktif-sitemap']);
+        $empty = LocationPage::factory()->create(['slug' => 'tanpa-gerobak']);
 
         $xml = $this->get('/sitemap.xml')->assertOk()->getContent();
 
         $this->assertStringContainsString(route('location-pages.show', 'masuk-sitemap'), $xml);
-        $this->assertStringNotContainsString('masih-draft', $xml);
+        $this->assertStringNotContainsString('nonaktif-sitemap', $xml);
         // Halaman tanpa gerobak tampil tidak dijanjikan ke mesin pencari.
         $this->assertStringNotContainsString('tanpa-gerobak', $xml);
         $this->assertStringNotContainsString('/lokasi', $xml);
@@ -368,7 +361,7 @@ class PublicLocationPageTest extends TestCase
         $location = Location::factory()
             ->for(LocationArea::factory()->for($group, 'group'), 'area')->create();
 
-        $page = $this->publishedPage([$group], [$location], ['title' => 'Alamat Homepage']);
+        $page = $this->visiblePage([$group], [$location], ['title' => 'Alamat Homepage']);
 
         $this->get('/')
             ->assertOk()
@@ -387,7 +380,7 @@ class PublicLocationPageTest extends TestCase
 
     public function test_a_page_without_visible_locations_stays_off_the_homepage(): void
     {
-        LocationPage::factory()->published()->create(['title' => 'Alamat Kosong']);
+        LocationPage::factory()->create(['title' => 'Alamat Kosong']);
 
         $this->get('/')->assertOk()->assertDontSee('Alamat Kosong');
     }
@@ -398,7 +391,7 @@ class PublicLocationPageTest extends TestCase
         $location = Location::factory()
             ->for(LocationArea::factory()->for($group, 'group'), 'area')->create();
 
-        $page = $this->publishedPage([$group], [$location]);
+        $page = $this->visiblePage([$group], [$location]);
 
         $content = $this->get($this->url($page))->assertOk()->getContent();
 
@@ -414,7 +407,7 @@ class PublicLocationPageTest extends TestCase
         $area = LocationArea::factory()->for($group, 'group')->create();
 
         $locations = Location::factory()->count(2)->for($area, 'area')->create()->all();
-        $page = $this->publishedPage([$group], $locations);
+        $page = $this->visiblePage([$group], $locations);
 
         $baseline = $this->countQueries(fn () => $this->get($this->url($page))->assertOk());
 

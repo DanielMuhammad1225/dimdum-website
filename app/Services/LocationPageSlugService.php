@@ -11,8 +11,8 @@ use Illuminate\Support\Str;
  * Pengelola slug Halaman Slug Lokasi.
  *
  * Halaman inilah satu-satunya pemilik URL publik modul lokasi, jadi hanya di
- * sini slug perlu dijaga. Setiap penggantian pada halaman yang PERNAH terbit
- * otomatis mencatat slug lama sebagai redirect 301.
+ * sini slug perlu dijaga. Setiap penggantian slug pada halaman yang sudah
+ * tersimpan otomatis mencatat slug lama sebagai redirect 301.
  *
  * Redirect selalu menunjuk ke HALAMAN, bukan ke slug lain, sehingga berapa
  * kali pun slug berganti seluruh slug lama mengarah ke canonical terbaru dalam
@@ -100,7 +100,6 @@ class LocationPageSlugService
 
         DB::transaction(function () use ($page, $newSlug, $userId): void {
             $previousSlug = $page->slug;
-            $wasPublished = $page->hasEverBeenPublished();
 
             /*
              | Slug baru tidak boleh sekaligus berstatus redirect. Kasusnya:
@@ -116,11 +115,16 @@ class LocationPageSlugService
             $page->save();
 
             /*
-             | Redirect hanya dicatat untuk halaman yang PERNAH terbit. Halaman
-             | yang masih draft belum punya URL publik, jadi tidak ada yang
-             | perlu diselamatkan.
+             | Redirect dicatat untuk SETIAP penggantian slug pada halaman yang
+             | sudah tersimpan.
+             |
+             | Dulu syaratnya "pernah terbit", yang bersandar pada published_at.
+             | Kolom itu sudah tidak ada, dan menebak dari is_active pun keliru:
+             | halaman yang sempat dinonaktifkan sebentar tetap punya URL yang
+             | mungkin sudah beredar. Mencatat redirect selalu lebih murah
+             | daripada mematikan tautan iklan.
              */
-            if ($wasPublished && $previousSlug !== null && $previousSlug !== '') {
+            if ($previousSlug !== null && $previousSlug !== '') {
                 LocationPageSlugRedirect::query()->updateOrCreate(
                     ['old_slug' => $previousSlug],
                     ['location_page_id' => $page->getKey(), 'created_by' => $userId],

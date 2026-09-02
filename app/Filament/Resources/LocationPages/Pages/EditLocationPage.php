@@ -84,11 +84,9 @@ class EditLocationPage extends EditRecord
         $groupIds = array_map('intval', (array) ($data['group_ids'] ?? []));
         $locationIds = array_map('intval', (array) ($data['location_ids'] ?? []));
         $requestedSlug = $data['slug'] ?? null;
-        $hasPublishedField = array_key_exists('published_at', $data);
-        $publishedAt = $data['published_at'] ?? null;
         $previousPoster = $record->poster_path;
 
-        unset($data['group_ids'], $data['location_ids'], $data['slug'], $data['published_at']);
+        unset($data['group_ids'], $data['location_ids'], $data['slug']);
 
         /*
          | Dua pemeriksaan server-side, dijalankan SEBELUM apa pun ditulis:
@@ -102,10 +100,6 @@ class EditLocationPage extends EditRecord
 
         $record->fill([...$data, 'updated_by' => auth()->id()]);
 
-        if ($hasPublishedField) {
-            $record->published_at = $publishedAt;
-        }
-
         DB::transaction(function () use ($record, $groupIds, $locationIds): void {
             $record->save();
             $record->groups()->sync($groupIds);
@@ -116,10 +110,9 @@ class EditLocationPage extends EditRecord
         UploadedImage::deleteReplaced($previousPoster, $record->poster_path);
 
         if (is_string($requestedSlug) && $requestedSlug !== '') {
-            $wasPublished = $record->hasEverBeenPublished();
             $previousSlug = $record->slug;
 
-            if ($slugService->apply($record, $requestedSlug, auth()->id()) && $wasPublished) {
+            if ($slugService->apply($record, $requestedSlug, auth()->id())) {
                 Notification::make()
                     ->warning()
                     ->title('URL halaman berubah')
@@ -139,9 +132,8 @@ class EditLocationPage extends EditRecord
         $record = $this->getRecord();
 
         /*
-         | Halaman yang belum bisa dibuka pengunjung menyebutkan sebabnya.
-         | "Aktif" saja tidak cukup: tanpa waktu terbit, URL-nya 404 dan
-         | admin tidak punya satu pun petunjuk tentang alasannya.
+         | Halaman yang belum bisa dibuka pengunjung menyebutkan sebabnya:
+         | nonaktif, atau berada di luar periode berlakunya.
          */
         $issue = $record->publicVisibilityIssue();
 
@@ -164,7 +156,7 @@ class EditLocationPage extends EditRecord
         if ($record->isPubliclyVisible() && ! LocationPage::query()->whereKey($record->getKey())->hasVisibleLocations()->exists()) {
             Notification::make()
                 ->warning()
-                ->title('Halaman ini terbit tanpa gerobak yang tampil')
+                ->title('Halaman ini aktif tanpa gerobak yang tampil')
                 ->body('Pengunjung hanya akan melihat pesan "sedang disiapkan". Periksa status gerobak, Area, Kota/Grup, dan provinsinya sebelum dipakai sebagai tujuan iklan.')
                 ->persistent()
                 ->send();

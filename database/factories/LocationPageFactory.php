@@ -35,45 +35,36 @@ class LocationPageFactory extends Factory
             'poster_path' => null,
             'seo_title' => null,
             'seo_description' => null,
-            'is_active' => false,
+            /*
+             | Aktif secara bawaan: sejak jadwal terbit dibuang, halaman aktif
+             | langsung dapat dibuka, dan itulah keadaan normal sebuah halaman.
+             | Test yang menguji halaman tersembunyi menyatakannya eksplisit.
+             */
+            'is_active' => true,
             'is_featured' => false,
-            'published_at' => null,
             'sort_order' => 0,
         ];
     }
 
-    /** Aktif dan sudah terbit -> tampil publik. */
-    public function published(): static
-    {
-        return $this->state(fn (): array => [
-            'is_active' => true,
-            'published_at' => now()->subDay(),
-        ]);
-    }
-
-    /** Aktif tetapi jadwal terbitnya masih di masa depan. */
-    public function scheduled(): static
-    {
-        return $this->state(fn (): array => [
-            'is_active' => true,
-            'published_at' => now()->addWeek(),
-        ]);
-    }
-
     public function inactive(): static
     {
+        return $this->state(fn (): array => ['is_active' => false]);
+    }
+
+    /** Periodenya baru dimulai nanti. */
+    public function upcoming(): static
+    {
         return $this->state(fn (): array => [
-            'is_active' => false,
-            'published_at' => now()->subDay(),
+            'is_active' => true,
+            'starts_at' => now()->addWeek(),
         ]);
     }
 
-    /** Sudah terbit tetapi periodenya sudah lewat. */
+    /** Periodenya sudah lewat. */
     public function expired(): static
     {
         return $this->state(fn (): array => [
             'is_active' => true,
-            'published_at' => now()->subMonth(),
             'starts_at' => now()->subMonth(),
             'ends_at' => now()->subDay(),
         ]);

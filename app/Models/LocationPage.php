@@ -30,9 +30,9 @@ class LocationPage extends Model
     use SoftDeletes;
 
     /**
-     * slug dan published_at TIDAK fillable: keduanya butuh permission khusus
-     * (change_location_page_slugs / publish_location_pages) dan diatur lewat
-     * jalur tersendiri, bukan mass assignment.
+     * slug TIDAK fillable: penggantiannya butuh permission khusus
+     * (change_location_page_slugs) dan mencatat redirect, jadi ia melewati
+     * jalur tersendiri -- bukan mass assignment.
      *
      * @var list<string>
      */
@@ -68,7 +68,6 @@ class LocationPage extends Model
         return [
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
-            'published_at' => 'datetime',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'sort_order' => 'integer',
@@ -126,13 +125,6 @@ class LocationPage extends Model
         return $query->where($query->qualifyColumn('is_active'), true);
     }
 
-    public function scopePublished(Builder $query): Builder
-    {
-        return $query
-            ->whereNotNull($query->qualifyColumn('published_at'))
-            ->where($query->qualifyColumn('published_at'), '<=', now());
-    }
-
     /**
      * Masih dalam periode berlaku.
      *
@@ -151,9 +143,16 @@ class LocationPage extends Model
                 ->orWhere($query->qualifyColumn('ends_at'), '>=', $now));
     }
 
+    /**
+     * Satu-satunya definisi visibilitas publik.
+     *
+     * Tidak terhapus (global scope SoftDeletes) DAN aktif DAN masih di dalam
+     * periode bila periodenya diisi. Tidak ada jadwal terbit terpisah:
+     * halaman aktif langsung dapat dibuka.
+     */
     public function scopePubliclyVisible(Builder $query): Builder
     {
-        return $query->active()->published()->withinPeriod();
+        return $query->active()->withinPeriod();
     }
 
     public function scopeFeatured(Builder $query): Builder
@@ -196,10 +195,6 @@ class LocationPage extends Model
             return false;
         }
 
-        if (! $this->published_at instanceof Carbon || $this->published_at->isFuture()) {
-            return false;
-        }
-
         return $this->isWithinPeriod();
     }
 
@@ -214,18 +209,13 @@ class LocationPage extends Model
         return ! ($this->ends_at instanceof Carbon && $this->ends_at->lessThan($now));
     }
 
-    public function hasEverBeenPublished(): bool
-    {
-        return $this->published_at !== null;
-    }
-
     /**
-     * Alasan halaman ini BELUM terlihat pengunjung, atau null bila sudah.
+     * Alasan halaman ini belum terlihat pengunjung, atau null bila sudah.
      *
      * Dipakai admin panel supaya "kenapa URL saya 404" terjawab di tempat
      * kejadian, bukan ditebak. Aturannya tidak berbeda dari
-     * isPubliclyVisible() -- hanya diperiksa satu per satu agar bisa
-     * disebutkan sebabnya.
+     * isPubliclyVisible() -- hanya diperiksa satu per satu agar sebabnya
+     * bisa disebutkan.
      */
     public function publicVisibilityIssue(): ?string
     {
@@ -237,22 +227,29 @@ class LocationPage extends Model
             return 'Halaman ini NONAKTIF, jadi URL-nya menghasilkan 404. Aktifkan pada tab Publikasi.';
         }
 
-        if (! $this->published_at instanceof Carbon) {
-            return 'Halaman ini masih DRAFT: kolom "Waktu terbit" belum diisi, jadi URL-nya menghasilkan 404. '
-                .'Isi waktu terbit pada tab Publikasi agar halaman dapat dibuka pengunjung.';
+        if ($this->starts_at instanceof Carbon && $this->starts_at->isFuture()) {
+            return 'Halaman ini baru berlaku mulai '.$this->starts_at->translatedFormat('d F Y H:i')
+                .'. Sampai saat itu URL-nya menghasilkan 404.';
         }
 
-        if ($this->published_at->isFuture()) {
-            return 'Halaman ini DIJADWALKAN terbit pada '.$this->published_at->translatedFormat('d F Y H:i')
-                .'. Sampai waktu itu URL-nya masih menghasilkan 404.';
-        }
-
-        if (! $this->isWithinPeriod()) {
-            return 'Halaman ini berada DI LUAR PERIODE berlakunya, jadi URL-nya menghasilkan 404. '
-                .'Periksa tanggal mulai dan selesai pada tab Isi Halaman.';
+        if ($this->ends_at instanceof Carbon && $this->ends_at->isPast()) {
+            return 'Periode halaman ini sudah berakhir pada '.$this->ends_at->translatedFormat('d F Y H:i')
+                .', jadi URL-nya menghasilkan 404.';
         }
 
         return null;
+    }
+
+    /**
+     * Label status untuk panel: AKTIF, NONAKTIF, atau DI LUAR PERIODE.
+     */
+    public function statusLabel(): string
+    {
+        if (! $this->is_active) {
+            return 'NONAKTIF';
+        }
+
+        return $this->isWithinPeriod() ? 'AKTIF' : 'DI LUAR PERIODE';
     }
 
     // ------------------------------------------------------------- accessors

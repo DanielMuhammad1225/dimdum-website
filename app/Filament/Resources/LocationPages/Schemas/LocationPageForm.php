@@ -309,12 +309,8 @@ class LocationPageForm
     {
         return [
             /*
-             | Status EFEKTIF disebutkan lebih dulu, sebelum saklarnya.
-             |
-             | "Aktif" saja tidak membuat halaman terbuka -- waktu terbit juga
-             | harus terisi. Tanpa keterangan ini, admin yang sudah menyalakan
-             | Aktif wajar menyimpulkan halamannya hidup, lalu menemukan 404
-             | tanpa petunjuk apa pun.
+             | Status EFEKTIF disebutkan lebih dulu, sebelum saklarnya, supaya
+             | "kenapa URL saya 404" terjawab di tempat kejadian.
              */
             Placeholder::make('public_status')
                 ->label('Status publik')
@@ -324,14 +320,8 @@ class LocationPageForm
 
             Toggle::make('is_active')
                 ->label('Aktif')
-                ->helperText('Saklar utama. Halaman tetap belum terbuka sampai "Waktu terbit" di bawah juga terisi.')
-                ->disabled(fn (): bool => ! self::canPublish())
-                ->dehydrated(fn (): bool => self::canPublish()),
-
-            DateTimePicker::make('published_at')
-                ->label('Waktu terbit')
-                ->helperText('WAJIB diisi agar halaman dapat dibuka pengunjung. Kosong berarti masih DRAFT dan URL-nya menghasilkan 404. Waktu di masa depan berarti terjadwal.')
-                ->seconds(false)
+                ->helperText('Satu-satunya saklar publikasi. Halaman aktif langsung dapat dibuka pengunjung; halaman nonaktif menghasilkan 404.')
+                ->default(true)
                 ->disabled(fn (): bool => ! self::canPublish())
                 ->dehydrated(fn (): bool => self::canPublish()),
 
@@ -347,18 +337,18 @@ class LocationPageForm
     protected static function publicStatusText(?LocationPage $record): string
     {
         if ($record === null) {
-            return 'Halaman baru tersimpan sebagai DRAFT. Isi "Waktu terbit" di bawah agar dapat dibuka pengunjung.';
+            return 'Halaman baru langsung dapat dibuka pengunjung begitu disimpan dalam keadaan aktif.';
         }
 
         $url = url('/alamat/'.$record->slug);
         $issue = $record->publicVisibilityIssue();
 
         if ($issue === null) {
-            return 'TERBIT &mdash; dapat dibuka di <a href="'.e($url)
+            return 'AKTIF &mdash; dapat dibuka di <a href="'.e($url)
                 .'" target="_blank" rel="noopener noreferrer" class="underline">'.e($url).'</a>';
         }
 
-        return 'BELUM TERBIT &mdash; '.e($issue).'<br>Alamat yang dituju nanti: '.e($url);
+        return e($record->statusLabel()).' &mdash; '.e($issue).'<br>Alamat yang dituju: '.e($url);
     }
 
     protected static function slugHelper(?LocationPage $record): string
@@ -367,12 +357,12 @@ class LocationPageForm
             return 'Anda tidak memiliki izin mengubah slug. Hubungi Admin bila URL perlu diganti.';
         }
 
-        if ($record?->hasEverBeenPublished()) {
-            return 'PERINGATAN: halaman ini sudah pernah terbit. Mengganti slug mengubah URL yang mungkin sedang dipakai iklan. '
+        if ($record?->exists) {
+            return 'PERINGATAN: mengganti slug mengubah URL yang mungkin sedang dipakai iklan. '
                 .'Slug lama otomatis dialihkan 301 ke slug baru, tetapi laporan iklan bisa terpecah.';
         }
 
-        return 'Bagian akhir URL halaman. Sebaiknya ditetapkan sebelum halaman diterbitkan.';
+        return 'Bagian akhir URL halaman. Sebaiknya ditetapkan sekali dan tidak diubah lagi.';
     }
 
     protected static function canChangeSlug(): bool

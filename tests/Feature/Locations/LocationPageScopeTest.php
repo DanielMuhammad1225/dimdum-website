@@ -43,11 +43,20 @@ class LocationPageScopeTest extends TestCase
             'period_text', 'starts_at', 'ends_at', 'button_text', 'button_url',
             'poster_path', 'poster_alt', 'poster_width', 'poster_height',
             'poster_mime_type', 'poster_size_bytes', 'seo_title', 'seo_description',
-            'is_active', 'is_featured', 'published_at', 'sort_order',
+            'is_active', 'is_featured', 'sort_order',
             'created_by', 'updated_by', 'deleted_at',
         ] as $column) {
             $this->assertTrue(Schema::hasColumn('location_pages', $column), "Kolom {$column} hilang.");
         }
+    }
+
+    /**
+     * Jadwal terbit sudah dibuang: satu saklar `is_active` sudah cukup, dan
+     * periode berlaku ditangani starts_at/ends_at.
+     */
+    public function test_the_page_table_no_longer_stores_a_publish_time(): void
+    {
+        $this->assertFalse(Schema::hasColumn('location_pages', 'published_at'));
     }
 
     public function test_a_page_may_cover_several_groups_and_hold_several_locations(): void
@@ -285,7 +294,7 @@ class LocationPageScopeTest extends TestCase
         $area = LocationArea::factory()->for($group, 'group')->create();
         $chosen = Location::factory()->for($area, 'area')->create();
 
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $this->scope()->sync($page, [$group->getKey()], [$chosen->getKey()]);
 
         // Gerobak baru di Kota/Grup yang SAMA, dibuat setelah halaman jadi.

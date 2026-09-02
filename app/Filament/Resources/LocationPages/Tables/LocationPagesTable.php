@@ -80,10 +80,10 @@ class LocationPagesTable
                     ->badge()
                     ->alignCenter()
                     ->color(fn (int $state): string => $state > 0 ? 'success' : 'warning')
-                    // Halaman terbit tanpa gerobak tampil = tujuan iklan yang
+                    // Halaman aktif tanpa gerobak tampil = tujuan iklan yang
                     // buruk. Diberi tanda jelas di daftar.
                     ->tooltip(fn (int $state, LocationPage $record): ?string => $state === 0 && $record->isPubliclyVisible()
-                        ? 'Halaman ini terbit tetapi tidak punya gerobak yang tampil. Belum ideal sebagai tujuan iklan.'
+                        ? 'Halaman ini aktif tetapi tidak punya gerobak yang tampil. Belum ideal sebagai tujuan iklan.'
                         : null),
 
                 IconColumn::make('is_featured')
@@ -98,14 +98,14 @@ class LocationPagesTable
                     ->alignCenter(),
 
                 TextColumn::make('publication_status')
-                    ->label('Publikasi')
+                    ->label('Status')
                     ->badge()
-                    // Dihitung sendiri: published_at null pada draft akan
-                    // membuat Filament menampilkan sel kosong.
-                    ->state(fn (LocationPage $record): string => self::publicationLabel($record))
-                    ->color(fn (LocationPage $record): string => match (true) {
-                        $record->isPubliclyVisible() => 'success',
-                        $record->published_at !== null => 'warning',
+                    // Dihitung sendiri: status efektif tidak tersimpan sebagai
+                    // satu kolom, jadi tidak bisa dibaca langsung.
+                    ->state(fn (LocationPage $record): string => $record->statusLabel())
+                    ->color(fn (LocationPage $record): string => match ($record->statusLabel()) {
+                        'AKTIF' => 'success',
+                        'DI LUAR PERIODE' => 'warning',
                         default => 'gray',
                     }),
 
@@ -139,7 +139,7 @@ class LocationPagesTable
                     ->query(fn (Builder $query): Builder => $query->publiclyVisible()),
 
                 Filter::make('needs_attention')
-                    ->label('Terbit tanpa gerobak tampil')
+                    ->label('Aktif tanpa gerobak tampil')
                     ->query(fn (Builder $query): Builder => $query
                         ->publiclyVisible()
                         ->whereDoesntHave('locations', fn (Builder $inner) => $inner->effectivelyVisible())),
@@ -177,22 +177,5 @@ class LocationPagesTable
                     : null)
             ->emptyStateHeading('Belum ada halaman lokasi')
             ->emptyStateDescription('Siapkan Provinsi, Kota/Grup, Area, dan gerobaknya lebih dulu, lalu buat halaman di sini.');
-    }
-
-    protected static function publicationLabel(LocationPage $record): string
-    {
-        if ($record->published_at === null) {
-            return 'Draft';
-        }
-
-        if ($record->published_at->isFuture()) {
-            return 'Terjadwal';
-        }
-
-        if (! $record->is_active) {
-            return 'Nonaktif';
-        }
-
-        return $record->isWithinPeriod() ? 'Terbit' : 'Di luar periode';
     }
 }

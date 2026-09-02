@@ -250,7 +250,7 @@ class LocationAdminResourceTest extends TestCase
         $area = LocationArea::factory()->create(['name' => 'Cianjur']);
         $location = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Cianjur']);
 
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $page->groups()->attach($area->location_group_id);
         $page->locations()->attach($location);
 
@@ -467,7 +467,7 @@ class LocationAdminResourceTest extends TestCase
         $area = LocationArea::factory()->create();
         $location = Location::factory()->for($area, 'area')->create(['name' => 'Gerobak Uji Hapus']);
 
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $page->groups()->attach($area->location_group_id);
         $page->locations()->attach($location);
 

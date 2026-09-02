@@ -139,7 +139,7 @@ class LocationPageAdminTest extends TestCase
 
         foreach ([
             'Judul halaman', 'Slug URL', 'Deskripsi singkat', 'Deskripsi detail',
-            'Kota/Grup', 'Gerobak', 'Poster halaman', 'Waktu terbit', 'Teks tombol',
+            'Kota/Grup', 'Gerobak', 'Poster halaman', 'Status publik', 'Teks tombol',
         ] as $label) {
             $this->assertStringContainsString($label, $html, "Label {$label} tidak ditemukan.");
         }
@@ -177,7 +177,6 @@ class LocationPageAdminTest extends TestCase
                 'group_ids' => [$group->getKey()],
                 'location_ids' => [$location->getKey()],
                 'is_active' => true,
-                'published_at' => now()->subMinute(),
             ])
             ->call('create')
             ->assertHasNoFormErrors();
@@ -315,12 +314,12 @@ class LocationPageAdminTest extends TestCase
 
     // ---------------------------------------------------------------- slug
 
-    public function test_changing_a_published_slug_records_a_redirect(): void
+    public function test_changing_a_slug_records_a_redirect(): void
     {
         $this->actingAsRole(UserRole::SuperAdmin);
 
         [$group, $location] = $this->groupWithLocation();
-        $page = LocationPage::factory()->published()->create(['slug' => 'alamat-lama']);
+        $page = LocationPage::factory()->create(['slug' => 'alamat-lama']);
         $page->groups()->attach($group);
         $page->locations()->attach($location);
 
@@ -367,25 +366,30 @@ class LocationPageAdminTest extends TestCase
             ->assertHasFormErrors(['slug']);
     }
 
-    public function test_the_slug_field_warns_once_the_page_has_been_published(): void
+    /**
+     * Peringatan slug tidak lagi bergantung pada status terbit: setiap
+     * halaman yang sudah tersimpan punya URL yang mungkin sudah beredar.
+     */
+    public function test_the_slug_field_warns_on_any_saved_page(): void
     {
         $this->actingAsRole(UserRole::SuperAdmin);
 
-        $published = LocationPage::factory()->published()->create();
-        $draft = LocationPage::factory()->create();
+        $active = LocationPage::factory()->create();
+        $inactive = LocationPage::factory()->inactive()->create();
 
-        $this->assertStringContainsString(
-            'PERINGATAN',
-            Livewire::test(EditLocationPage::class, ['record' => $published->getRouteKey()])->html(),
-        );
+        foreach ([$active, $inactive] as $page) {
+            $this->assertStringContainsString(
+                'PERINGATAN',
+                Livewire::test(EditLocationPage::class, ['record' => $page->getRouteKey()])->html(),
+            );
+        }
 
+        // Halaman baru belum punya URL, jadi tidak perlu diperingatkan.
         $this->assertStringNotContainsString(
             'PERINGATAN',
-            Livewire::test(EditLocationPage::class, ['record' => $draft->getRouteKey()])->html(),
+            Livewire::test(CreateLocationPage::class)->html(),
         );
     }
-
-    // ----------------------------------------------------------------- CTA
 
     public function test_an_unsafe_cta_url_is_rejected(): void
     {
@@ -455,7 +459,7 @@ class LocationPageAdminTest extends TestCase
         $inactive = Location::factory()->inactive()
             ->for(LocationArea::factory()->for($group, 'group'), 'area')->create();
 
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $page->groups()->attach($group);
         $page->locations()->attach([$location->getKey(), $inactive->getKey()]);
 
@@ -466,22 +470,35 @@ class LocationPageAdminTest extends TestCase
             ->assertTableColumnStateSet('visible_locations_count', 1, $page);
     }
 
-    public function test_the_publication_column_labels_every_status(): void
+    public function test_the_status_column_labels_every_state(): void
     {
         $this->actingAsRole(UserRole::SuperAdmin);
 
-        $draft = LocationPage::factory()->create();
-        $scheduled = LocationPage::factory()->scheduled()->create();
+        $active = LocationPage::factory()->create();
         $inactive = LocationPage::factory()->inactive()->create();
+        $upcoming = LocationPage::factory()->upcoming()->create();
         $expired = LocationPage::factory()->expired()->create();
-        $published = LocationPage::factory()->published()->create();
 
         Livewire::test(ListLocationPages::class)
-            ->assertTableColumnStateSet('publication_status', 'Draft', $draft)
-            ->assertTableColumnStateSet('publication_status', 'Terjadwal', $scheduled)
-            ->assertTableColumnStateSet('publication_status', 'Nonaktif', $inactive)
-            ->assertTableColumnStateSet('publication_status', 'Di luar periode', $expired)
-            ->assertTableColumnStateSet('publication_status', 'Terbit', $published);
+            ->assertTableColumnStateSet('publication_status', 'AKTIF', $active)
+            ->assertTableColumnStateSet('publication_status', 'NONAKTIF', $inactive)
+            // Periode yang belum mulai maupun yang sudah lewat sama-sama
+            // berada di luar periode.
+            ->assertTableColumnStateSet('publication_status', 'DI LUAR PERIODE', $upcoming)
+            ->assertTableColumnStateSet('publication_status', 'DI LUAR PERIODE', $expired);
+    }
+
+    /**
+     * Tidak ada lagi jadwal terbit terpisah: form hanya punya satu saklar.
+     */
+    public function test_the_form_no_longer_offers_a_publish_time(): void
+    {
+        $this->actingAsRole(UserRole::SuperAdmin);
+
+        $html = Livewire::test(CreateLocationPage::class)->html();
+
+        $this->assertStringNotContainsString('Waktu terbit', $html);
+        $this->assertStringNotContainsString('data.published_at', $html);
     }
 
     // ------------------------------------------------------------ reorder

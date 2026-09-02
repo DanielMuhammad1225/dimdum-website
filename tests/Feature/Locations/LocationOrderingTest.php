@@ -276,7 +276,7 @@ class LocationOrderingTest extends TestCase
         $kedua = Location::factory()->for($second, 'area')->create(['name' => 'Gerobak Kedua']);
 
         // Halaman publik menampilkan kedua gerobak, dikelompokkan per Area.
-        $page = LocationPage::factory()->published()->create();
+        $page = LocationPage::factory()->create();
         $page->groups()->attach($group);
         $page->locations()->attach([$awal->getKey(), $kedua->getKey()]);
 

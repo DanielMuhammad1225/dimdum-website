@@ -36,7 +36,7 @@ class LocationImageUploadTest extends TestCase
         $page = LocationPage::query()->first();
 
         if ($page === null) {
-            $page = LocationPage::factory()->published()->create();
+            $page = LocationPage::factory()->create();
             $page->groups()->attach($this->area->location_group_id);
             $page->locations()->attach($this->location);
         }
