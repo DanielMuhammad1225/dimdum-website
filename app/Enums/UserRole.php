@@ -49,6 +49,7 @@ enum UserRole: string
                 PanelPermission::ManageHomepage,
                 ...PanelPermission::locationCases(),
                 ...PanelPermission::locationPageCases(),
+                ...PanelPermission::productCases(),
             ],
 
             /*
@@ -61,6 +62,13 @@ enum UserRole: string
              | mengganti slug-nya tetap menjadi kewenangan Admin dan Super
              | Admin. Operator tetap dapat mengubah data gerobak yang tampil
              | di halaman itu, karena itu memang tugasnya.
+             |
+             | Pada modul Produk polanya sama: Operator mengurus isi katalog
+             | sehari-hari -- melihat, menambah, mengubah, dan menggantikan
+             | fotonya. Menghapus, apalagi menghapus permanen, tetap milik
+             | Admin dan Super Admin: satu produk yang hilang berarti satu
+             | kartu hilang dari homepage tanpa jejak yang bisa dipulihkan
+             | Operator sendiri.
              */
             self::Operator => [
                 PanelPermission::AccessAdminPanel,
@@ -68,6 +76,10 @@ enum UserRole: string
                 PanelPermission::CreateLocations,
                 PanelPermission::UpdateLocations,
                 PanelPermission::ManageLocationMedia,
+                PanelPermission::ViewProducts,
+                PanelPermission::CreateProducts,
+                PanelPermission::UpdateProducts,
+                PanelPermission::ManageProductMedia,
             ],
         };
     }

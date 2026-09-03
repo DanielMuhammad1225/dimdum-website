@@ -42,6 +42,18 @@ class UploadedImage
     /** Poster Halaman Slug Lokasi. */
     public const LOCATION_PAGE_DIRECTORY = 'location-pages';
 
+    /** Foto produk katalog. */
+    public const PRODUCT_DIRECTORY = 'products';
+
+    /**
+     * Foto produk dibatasi lebih ketat daripada upload lain.
+     *
+     * Kartu produk tampil enam sekaligus di homepage, jadi berkas besar
+     * langsung terasa pada halaman yang paling sering dibuka. 2 MB sudah
+     * lebih dari cukup untuk foto persegi satu produk.
+     */
+    public const PRODUCT_MAX_SIZE_KB = 2048;
+
     /**
      * MIME type yang diterima, sekaligus ekstensi resmi untuk masing-masing.
      */
@@ -62,6 +74,7 @@ class UploadedImage
         self::OG_DIRECTORY,
         self::LOCATION_ROOT_DIRECTORY,
         self::LOCATION_PAGE_DIRECTORY,
+        self::PRODUCT_DIRECTORY,
     ];
 
     public static function make(string $name, string $directory): FileUpload
@@ -114,6 +127,25 @@ class UploadedImage
             ->helperText('JPG, PNG, atau WebP. Maksimal 3 MB. Tampil sebagai gambar utama halaman dan pratinjau saat dibagikan.')
             ->imageEditor()
             ->imageEditorAspectRatios([null, '4:5', '1:1', '16:9']);
+    }
+
+    /**
+     * Foto satu produk katalog.
+     *
+     * Aturannya sama dengan upload lain -- allowlist MIME tanpa SVG, nama
+     * file acak, tipe ditentukan dari ISI berkas -- dengan batas ukuran yang
+     * lebih kecil.
+     */
+    public static function product(string $name = 'image_path'): FileUpload
+    {
+        return self::make($name, self::PRODUCT_DIRECTORY)
+            ->label('Foto produk')
+            ->helperText('Opsional. JPG, PNG, atau WebP. Maksimal 2 MB. Bila kosong, emoji di bawah yang tampil.')
+            ->maxSize(self::PRODUCT_MAX_SIZE_KB)
+            ->imageEditor()
+            // Kartu produk berbentuk persegi; rasio lain akan terpotong.
+            ->imageEditorAspectRatios(['1:1'])
+            ->imagePreviewHeight('120');
     }
 
     /**

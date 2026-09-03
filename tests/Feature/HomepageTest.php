@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\HomeController;
+use App\Models\Product;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -94,12 +95,27 @@ class HomepageTest extends TestCase
             ->assertSee('Informasi lokasi segera hadir');
     }
 
-    public function test_homepage_lists_configured_product_variants(): void
+    /**
+     * Daftar produk berasal dari tabel products, bukan lagi dari config.
+     *
+     * Section-nya sendiri -- judul, deskripsi, catatan -- tetap milik
+     * Homepage CMS; hanya kartunya yang berpindah ke database.
+     */
+    public function test_homepage_lists_products_from_the_database(): void
     {
-        $response = $this->get('/');
+        $names = ['Dimsum Reguler', 'Ekkado', 'Sushi'];
 
-        foreach (config('homepage.products.items') as $item) {
-            $response->assertSee($item['name']);
+        foreach ($names as $index => $name) {
+            Product::factory()->onHomepage()->create([
+                'name' => $name,
+                'sort_order' => $index + 1,
+            ]);
+        }
+
+        $response = $this->get('/')->assertOk();
+
+        foreach ($names as $name) {
+            $response->assertSee($name, false);
         }
     }
 
@@ -123,12 +139,12 @@ class HomepageTest extends TestCase
         $this->get('/')->assertOk();
 
         /*
-         | Tiga query tetap: site settings, homepage settings, dan daftar
-         | wilayah lokasi. Jumlahnya KONSTAN -- tidak bertambah per section,
-         | per komponen Blade, maupun per wilayah/gerobak.
+         | Empat query tetap: site settings, homepage settings, daftar wilayah
+         | lokasi, dan daftar produk. Jumlahnya KONSTAN -- tidak bertambah per
+         | section, per komponen Blade, per wilayah/gerobak, maupun per produk.
          */
         $this->assertLessThanOrEqual(
-            3,
+            4,
             count($queries),
             'Homepage melakukan query berlebih: '.implode(' | ', $queries),
         );

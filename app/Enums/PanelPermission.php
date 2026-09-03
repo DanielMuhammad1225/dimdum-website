@@ -42,6 +42,14 @@ enum PanelPermission: string
     case ChangeLocationPageSlugs = 'change_location_page_slugs';
     case ManageLocationPageMedia = 'manage_location_page_media';
 
+    // ------------------------------------------------------------- produk
+    case ViewProducts = 'view_products';
+    case CreateProducts = 'create_products';
+    case UpdateProducts = 'update_products';
+    case DeleteProducts = 'delete_products';
+    case ForceDeleteProducts = 'force_delete_products';
+    case ManageProductMedia = 'manage_product_media';
+
     public function label(): string
     {
         return match ($this) {
@@ -67,6 +75,13 @@ enum PanelPermission: string
             self::PublishLocationPages => 'Terbitkan Halaman Slug Lokasi',
             self::ChangeLocationPageSlugs => 'Ubah Slug Halaman Lokasi',
             self::ManageLocationPageMedia => 'Kelola Poster Halaman Lokasi',
+
+            self::ViewProducts => 'Lihat Produk',
+            self::CreateProducts => 'Tambah Produk',
+            self::UpdateProducts => 'Ubah Produk',
+            self::DeleteProducts => 'Hapus Produk',
+            self::ForceDeleteProducts => 'Hapus Permanen Produk',
+            self::ManageProductMedia => 'Kelola Foto Produk',
         };
     }
 
@@ -105,6 +120,29 @@ enum PanelPermission: string
             self::PublishLocationPages,
             self::ChangeLocationPageSlugs,
             self::ManageLocationPageMedia,
+        ];
+    }
+
+    /**
+     * Permission modul Produk.
+     *
+     * Menghapus permanen dipisah dari menghapus biasa: soft delete masih bisa
+     * dipulihkan, sedangkan hapus permanen ikut membuang berkas fotonya dan
+     * tidak dapat dibatalkan. Pemisahan ini membuat batas "Operator tidak
+     * boleh force delete" berlaku di tingkat permission, bukan sekadar
+     * kebetulan karena ia juga tidak punya izin hapus.
+     *
+     * @return list<self>
+     */
+    public static function productCases(): array
+    {
+        return [
+            self::ViewProducts,
+            self::CreateProducts,
+            self::UpdateProducts,
+            self::DeleteProducts,
+            self::ForceDeleteProducts,
+            self::ManageProductMedia,
         ];
     }
 

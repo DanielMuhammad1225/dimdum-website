@@ -2,11 +2,14 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Enums\ProductCategory;
+use App\Enums\ProductType;
 use App\Enums\UserRole;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationGroup;
 use App\Models\LocationPage;
+use App\Models\Product;
 use App\Models\Province;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -524,6 +527,71 @@ class AdminLivewireSessionTest extends TestCase
         $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menata urutan.');
         $this->assertSame(1, (int) $second->fresh()->sort_order);
         $this->assertStillSignedIn('Setelah reorder');
+    }
+
+    // ------------------------------------------------------------- produk
+
+    public function test_creating_a_product_keeps_the_user_signed_in(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $page = $this->browserGet('/admin/produk/create');
+        $page->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($page->getContent(), 'CreateProduct', [
+            'data.name' => 'Dimsum Uji Session',
+            'data.category' => ProductCategory::Menu->value,
+            'data.type' => ProductType::Satuan->value,
+        ], [['path' => '', 'method' => 'create', 'params' => []]])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah membuat produk.');
+        $this->assertDatabaseHas('products', ['name' => 'Dimsum Uji Session']);
+        $this->assertStillSignedIn('Setelah create produk');
+    }
+
+    public function test_updating_a_product_keeps_the_user_signed_in(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $product = Product::factory()->create(['name' => 'Nama Lama']);
+
+        $page = $this->browserGet("/admin/produk/{$product->getKey()}/edit");
+        $page->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($page->getContent(), 'EditProduct', [
+            'data.name' => 'Nama Baru',
+        ], [['path' => '', 'method' => 'save', 'params' => []]])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menyimpan produk.');
+        $this->assertSame('Nama Baru', $product->fresh()->name);
+        $this->assertStillSignedIn('Setelah update produk');
+    }
+
+    public function test_reordering_products_keeps_the_session(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $first = Product::factory()->create(['sort_order' => 1]);
+        $second = Product::factory()->create(['sort_order' => 2]);
+
+        $list = $this->browserGet('/admin/produk');
+        $list->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($list->getContent(), 'ListProducts', [], [
+            ['path' => '', 'method' => 'reorderTable', 'params' => [
+                [(string) $second->getKey(), (string) $first->getKey()],
+            ]],
+        ])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menata urutan produk.');
+        $this->assertSame(1, (int) $second->fresh()->sort_order);
+        $this->assertStillSignedIn('Setelah reorder produk');
     }
 
     /**

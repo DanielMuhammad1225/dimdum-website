@@ -3,6 +3,7 @@
 namespace Tests\Feature\Cms;
 
 use App\Models\HomepageSetting;
+use App\Models\Product;
 use App\Models\SiteSetting;
 use App\Services\HomepageContentService;
 use Database\Seeders\HomepageContentSeeder;
@@ -244,8 +245,7 @@ class PublicHomepageFromDatabaseTest extends TestCase
             ],
         ]);
 
-        // Daftar varian masih berasal dari config sampai modul produk dibuat.
-        config(['homepage.products.items' => []]);
+        // Tidak ada satu pun produk yang dipilih untuk homepage.
         $this->flushContentCache();
 
         $this->get('/')
@@ -257,6 +257,9 @@ class PublicHomepageFromDatabaseTest extends TestCase
     public function test_the_products_empty_state_is_hidden_while_variants_exist(): void
     {
         $this->seedContent();
+
+        // Daftar produk kini berasal dari tabel products, bukan config.
+        Product::factory()->onHomepage()->create(['name' => 'Dimsum Reguler']);
 
         $this->get('/')
             ->assertOk()
@@ -280,9 +283,10 @@ class PublicHomepageFromDatabaseTest extends TestCase
         $this->get('/')->assertOk();
 
         $this->assertLessThanOrEqual(
-            3,
+            4,
             count($queries),
-            'Homepage hanya boleh query site settings, homepage settings, dan daftar wilayah: '.implode(' | ', $queries),
+            'Homepage hanya boleh query site settings, homepage settings, daftar wilayah, dan produk: '
+            .implode(' | ', $queries),
         );
     }
 
