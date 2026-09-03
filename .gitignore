@@ -25,6 +25,8 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+graphify-out/
+
 
 # --- DIMDUM ---
 # Semua varian .env kecuali template.
