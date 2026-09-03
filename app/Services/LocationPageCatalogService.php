@@ -6,6 +6,7 @@ use App\Models\Location;
 use App\Models\LocationImage;
 use App\Models\LocationPage;
 use App\Models\LocationPageSlugRedirect;
+use App\Models\Product;
 use App\Support\MapsUrl;
 use App\Support\SafeUrl;
 use App\Support\WhatsAppNumber;
@@ -254,8 +255,57 @@ class LocationPageCatalogService
             'locations' => $cards,
             // Konteks pengelompokan, untuk heading di halaman publik.
             'sections' => $this->sections($cards),
+            /*
+             | Section produk. Daftar KOSONG berarti section-nya tidak dirender
+             | sama sekali -- baik karena saklarnya mati, maupun karena seluruh
+             | produk terpilih sudah nonaktif atau terhapus. Blade cukup
+             | memeriksa satu hal itu, tanpa perlu tahu sebabnya.
+             */
+            'products' => $this->productCards($page),
             'updated_at' => $page->updated_at?->toAtomString(),
         ];
+    }
+
+    /**
+     * Kartu produk yang dipilih untuk halaman ini.
+     *
+     * Kosong bila saklar section dimatikan. Bila menyala, hanya produk yang
+     * AKTIF dan tidak terhapus yang ikut -- produk yang dinonaktifkan setelah
+     * dipilih hilang dari halaman tanpa menyisakan kartu kosong, dan
+     * relasinya tetap tersimpan supaya kembali saat diaktifkan lagi.
+     *
+     * show_on_homepage SENGAJA tidak dipakai di sini: saklar itu milik
+     * homepage dan tidak menentukan apa pun pada halaman slug lokasi.
+     *
+     * Urutannya mengikuti products.sort_order -- urutan katalog, bukan urutan
+     * pemilihan di form.
+     *
+     * @return list<array<string, mixed>>
+     */
+    protected function productCards(LocationPage $page): array
+    {
+        if (! $page->show_products) {
+            return [];
+        }
+
+        return $page->products()
+            ->active()
+            ->ordered()
+            ->get()
+            ->map(fn (Product $product): array => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'price' => $product->priceLabel(),
+                /*
+                 | Berkas yang tidak ada di disk menghasilkan null, bukan path
+                 | -- sehingga <img src=""> tidak mungkin terbentuk dan emoji
+                 | yang mengambil alih.
+                 */
+                'image' => ImageMetadata::resolve($product->image_path, $product->imageAltText()),
+                'emoji' => $product->fallbackEmoji(),
+            ])
+            ->values()
+            ->all();
     }
 
     /**

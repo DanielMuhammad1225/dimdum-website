@@ -5,6 +5,7 @@ namespace App\Filament\Resources\LocationPages\Pages;
 use App\Filament\Resources\LocationPages\LocationPageResource;
 use App\Services\ImageMetadata;
 use App\Services\LocationOrderingService;
+use App\Services\LocationPageProductService;
 use App\Services\LocationPageScopeService;
 use App\Services\LocationPageSlugService;
 use Filament\Notifications\Notification;
@@ -30,14 +31,27 @@ class CreateLocationPage extends CreateRecord
         $slugService = app(LocationPageSlugService::class);
         $scope = app(LocationPageScopeService::class);
 
+        $products = app(LocationPageProductService::class);
+
         $groupIds = array_map('intval', (array) ($data['group_ids'] ?? []));
         $locationIds = array_map('intval', (array) ($data['location_ids'] ?? []));
         $slug = $slugService->uniqueSlug((string) ($data['slug'] ?? ''), $data['title'] ?? null);
 
-        unset($data['group_ids'], $data['location_ids'], $data['slug']);
+        /*
+         | product_ids ADA hanya bila saklar section produk dinyalakan:
+         | Filament membuang state komponen tersembunyi. Ketiadaan key itulah
+         | yang dipakai untuk memutuskan "jangan sentuh relasinya", bukan
+         | array kosong -- yang justru akan menghapus pilihannya.
+         */
+        $hasProductPayload = array_key_exists('product_ids', $data);
+        $productIds = $products->normalizeIds($data['product_ids'] ?? null);
+        $showProducts = (bool) ($data['show_products'] ?? false);
+
+        unset($data['group_ids'], $data['location_ids'], $data['slug'], $data['product_ids']);
 
         // Lapis terakhir: id di luar cakupan ditolak sebelum apa pun ditulis.
         $scope->assertLocationsWithinGroups($locationIds, $groupIds);
+        $products->assertSelection($showProducts, $productIds);
 
         $data = [...$data, ...self::posterMetadata($data)];
 
@@ -63,6 +77,10 @@ class CreateLocationPage extends CreateRecord
             $record->groups()->sync($groupIds);
             $record->locations()->sync($locationIds);
         });
+
+        if ($hasProductPayload) {
+            $products->sync($record, $productIds);
+        }
 
         return $record;
     }

@@ -144,4 +144,46 @@
             @endif
         </div>
     </section>
+
+    {{--
+        Section produk.
+
+        Satu pemeriksaan saja: daftarnya kosong atau tidak. Service sudah
+        memutuskan segalanya -- saklar mati, produk nonaktif, produk terhapus,
+        maupun berkas foto yang hilang -- sehingga di sini tidak ada kartu
+        kosong maupun gambar rusak yang mungkin terbentuk.
+
+        Kartunya memakai komponen yang sama dengan homepage, jadi nama, foto,
+        emoji cadangan, dan aturan label harga tidak pernah dituliskan dua
+        kali. Deskripsi sengaja tidak diteruskan: kartu di sini seringkas
+        kartu homepage.
+    --}}
+    @if (! empty($page['products']))
+        <section id="produk" class="bg-brand-cream py-12 sm:py-16" aria-labelledby="produk-judul">
+            <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+                <h2 id="produk-judul" class="font-display text-2xl font-bold text-brand-brown sm:text-3xl">
+                    Produk yang Tersedia
+                </h2>
+
+                <ul class="mt-8 grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 lg:grid-cols-4">
+                    @foreach ($page['products'] as $product)
+                        <li>
+                            <x-product-card
+                                :name="$product['name']"
+                                :price="$product['price']"
+                                :image="$product['image']"
+                                :emoji="$product['emoji']" />
+                        </li>
+                    @endforeach
+                </ul>
+
+                <p class="mt-8 text-sm text-brand-brown/70">
+                    Ketersediaan produk bisa berbeda di setiap gerobak.
+                    <a href="{{ route('products.index') }}" class="font-semibold text-brand-brown underline decoration-brand-orange decoration-2 underline-offset-4 hover:text-brand-orange">
+                        Lihat seluruh produk
+                    </a>
+                </p>
+            </div>
+        </section>
+    @endif
 @endsection

@@ -74,4 +74,10 @@ class LocationPageFactory extends Factory
     {
         return $this->state(fn (): array => ['is_featured' => true]);
     }
+
+    /** Section produk dinyalakan. Pilihan produknya dipasang test sendiri. */
+    public function showingProducts(): static
+    {
+        return $this->state(fn (): array => ['show_products' => true]);
+    }
 }

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\LocationPages\Pages;
 use App\Filament\Resources\LocationPages\LocationPageResource;
 use App\Filament\Support\UploadedImage;
 use App\Models\LocationPage;
+use App\Services\LocationPageProductService;
 use App\Services\LocationPageScopeService;
 use App\Services\LocationPageSlugService;
 use Filament\Actions\Action;
@@ -38,6 +39,13 @@ class EditLocationPage extends EditRecord
         $data['group_ids'] = $record->groups()->pluck('location_groups.id')->all();
         $data['location_ids'] = $record->locations()->pluck('locations.id')->all();
 
+        /*
+         | Diisi ulang APA PUN status saklarnya. Pilihan yang tersimpan harus
+         | sudah terpasang di komponennya sebelum saklar dinyalakan, supaya
+         | menyalakannya memunculkan pilihan lama -- bukan daftar kosong.
+         */
+        $data['product_ids'] = $record->products()->pluck('products.id')->all();
+
         return $data;
     }
 
@@ -67,6 +75,10 @@ class EditLocationPage extends EditRecord
                     DB::transaction(function () use ($record): void {
                         $record->groups()->detach();
                         $record->locations()->detach();
+                        // Pivot produk sudah cascade di level database; dilepas
+                        // di sini juga supaya seluruh pelepasan relasi halaman
+                        // terbaca di satu tempat.
+                        $record->products()->detach();
                     });
                 })
                 ->after(function (LocationPage $record): void {
@@ -81,12 +93,24 @@ class EditLocationPage extends EditRecord
         $slugService = app(LocationPageSlugService::class);
         $scope = app(LocationPageScopeService::class);
 
+        $products = app(LocationPageProductService::class);
+
         $groupIds = array_map('intval', (array) ($data['group_ids'] ?? []));
         $locationIds = array_map('intval', (array) ($data['location_ids'] ?? []));
         $requestedSlug = $data['slug'] ?? null;
         $previousPoster = $record->poster_path;
 
-        unset($data['group_ids'], $data['location_ids'], $data['slug']);
+        /*
+         | Saklar section produk mati -> field-nya tersembunyi -> Filament
+         | membuang state-nya, sehingga key ini TIDAK ADA. Itulah tandanya
+         | relasi produk tidak boleh disentuh sama sekali; pilihan lama harus
+         | tetap utuh dan kembali saat saklarnya dinyalakan lagi.
+         */
+        $hasProductPayload = array_key_exists('product_ids', $data);
+        $productIds = $products->normalizeIds($data['product_ids'] ?? null);
+        $showProducts = (bool) ($data['show_products'] ?? $record->show_products);
+
+        unset($data['group_ids'], $data['location_ids'], $data['slug'], $data['product_ids']);
 
         /*
          | Dua pemeriksaan server-side, dijalankan SEBELUM apa pun ditulis:
@@ -95,6 +119,10 @@ class EditLocationPage extends EditRecord
          */
         $scope->assertGroupsCanBeDetached($record, $groupIds);
         $scope->assertLocationsWithinGroups($locationIds, $groupIds);
+
+        if ($hasProductPayload) {
+            $products->assertSelection($showProducts, $productIds);
+        }
 
         $data = [...$data, ...CreateLocationPage::posterMetadata($data)];
 
@@ -105,6 +133,10 @@ class EditLocationPage extends EditRecord
             $record->groups()->sync($groupIds);
             $record->locations()->sync($locationIds);
         });
+
+        if ($hasProductPayload) {
+            $products->sync($record, $productIds);
+        }
 
         // Poster lama dibuang SETELAH yang baru tersimpan.
         UploadedImage::deleteReplaced($previousPoster, $record->poster_path);

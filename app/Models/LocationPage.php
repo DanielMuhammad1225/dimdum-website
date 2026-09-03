@@ -23,6 +23,12 @@ use Illuminate\Support\Carbon;
  * Cakupan tidak otomatis menjadi isi. Gerobak baru yang muncul di Kota/Grup
  * yang sama TIDAK ikut tampil sampai admin memilihnya -- halaman iklan tidak
  * boleh berubah isinya sendiri.
+ *
+ * Relasi ketiga berdiri sendiri dari keduanya:
+ *
+ *   products()  Produk yang dipilih untuk section produk halaman ini.
+ *               Tidak ada hubungannya dengan cakupan wilayah, dan
+ *               show_on_homepage pada produk tidak berpengaruh di sini.
  */
 class LocationPage extends Model
 {
@@ -55,6 +61,7 @@ class LocationPage extends Model
         'seo_description',
         'is_active',
         'is_featured',
+        'show_products',
         'sort_order',
         'created_by',
         'updated_by',
@@ -68,6 +75,7 @@ class LocationPage extends Model
         return [
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
+            'show_products' => 'boolean',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'sort_order' => 'integer',
@@ -101,6 +109,21 @@ class LocationPage extends Model
     public function locations(): BelongsToMany
     {
         return $this->belongsToMany(Location::class, 'location_page_location')->withTimestamps();
+    }
+
+    /**
+     * Produk yang dipilih untuk ditampilkan di halaman ini.
+     *
+     * Hanya relasi. Nama, kategori, harga, foto, dan deskripsi tetap dibaca
+     * dari tabel products -- halaman ini tidak menyimpan salinannya.
+     *
+     * Relasi TIDAK ikut dihapus ketika show_products dimatikan: mematikan
+     * saklar hanya menyembunyikan section, dan pilihan lama harus kembali
+     * apa adanya saat saklarnya dinyalakan lagi.
+     */
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'location_page_product')->withTimestamps();
     }
 
     public function slugRedirects(): HasMany

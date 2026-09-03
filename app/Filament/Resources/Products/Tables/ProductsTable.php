@@ -8,6 +8,7 @@ use App\Enums\ProductType;
 use App\Filament\Support\ReorderGate;
 use App\Filament\Support\UploadedImage;
 use App\Models\Product;
+use App\Services\LocationPageCatalogService;
 use App\Services\ProductCatalogService;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
@@ -47,8 +48,15 @@ class ProductsTable
              | Filament menyimpan urutan baru lewat SATU query update, bukan
              | save() per model, jadi event model tidak berjalan dan cache
              | katalog tidak ikut basi dengan sendirinya.
+             |
+             | Dua versi dinaikkan: urutan produk juga menentukan susunan kartu
+             | pada section produk Halaman Slug Lokasi, jadi cache halaman itu
+             | ikut basi.
              */
-            ->afterReordering(fn () => ProductCatalogService::flushCache())
+            ->afterReordering(function (): void {
+                ProductCatalogService::flushCache();
+                LocationPageCatalogService::flushCache();
+            })
             ->columns([
                 ImageColumn::make('image_path')
                     ->label('Foto')

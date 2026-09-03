@@ -4,11 +4,13 @@ namespace App\Models;
 
 use App\Enums\ProductCategory;
 use App\Enums\ProductType;
+use App\Services\LocationPageCatalogService;
 use App\Services\ProductCatalogService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -62,23 +64,42 @@ class Product extends Model
     }
 
     /**
-     * Setiap perubahan produk menaikkan versi cache katalog.
+     * Setiap perubahan produk menaikkan DUA versi cache.
      *
      * Satu kait ini menutup SELURUH sebab yang disebutkan kebutuhan: data,
      * status aktif, saklar homepage, harga, dan foto semuanya berjalan lewat
      * save(). Yang tidak lewat sini hanya reorder -- Filament menyimpannya
      * dengan satu query update tanpa event model -- dan itu ditangani
-     * afterReordering() pada tabelnya.
+     * afterReordering() pada tabelnya, yang juga menaikkan keduanya.
      */
     protected static function booted(): void
     {
-        static::saved(fn () => ProductCatalogService::flushCache());
-        static::deleted(fn () => ProductCatalogService::flushCache());
-        static::restored(fn () => ProductCatalogService::flushCache());
-        static::forceDeleted(fn () => ProductCatalogService::flushCache());
+        foreach (['saved', 'deleted', 'restored', 'forceDeleted'] as $event) {
+            static::{$event}(function (): void {
+                ProductCatalogService::flushCache();
+
+                /*
+                 | Halaman Slug Lokasi kini ikut mencetak fakta produk, jadi
+                 | perubahan produk membuat payload halaman itu basi juga.
+                 | Dua versi cache dinaikkan bersamaan di sini, bukan salah
+                 | satu: kalau hanya versi produk yang naik, halaman lokasi
+                 | akan tetap menyajikan harga atau foto lama sampai TTL-nya
+                 | habis.
+                 */
+                LocationPageCatalogService::flushCache();
+            });
+        }
     }
 
     // --------------------------------------------------------- relationships
+
+    /**
+     * Halaman Slug Lokasi yang menampilkan produk ini.
+     */
+    public function pages(): BelongsToMany
+    {
+        return $this->belongsToMany(LocationPage::class, 'location_page_product')->withTimestamps();
+    }
 
     public function createdBy(): BelongsTo
     {

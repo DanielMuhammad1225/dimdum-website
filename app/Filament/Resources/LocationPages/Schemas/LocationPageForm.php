@@ -5,6 +5,7 @@ namespace App\Filament\Resources\LocationPages\Schemas;
 use App\Enums\PanelPermission;
 use App\Filament\Support\UploadedImage;
 use App\Models\LocationPage;
+use App\Services\LocationPageProductService;
 use App\Services\LocationPageScopeService;
 use App\Services\LocationPageSlugService;
 use App\Support\SafeUrl;
@@ -21,6 +22,7 @@ use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Form Halaman Slug Lokasi.
@@ -49,6 +51,7 @@ class LocationPageForm
                     ->tabs([
                         Tabs\Tab::make('Isi Halaman')->schema(self::contentFields()),
                         Tabs\Tab::make('Lokasi')->schema(self::scopeFields()),
+                        Tabs\Tab::make('Produk')->schema(self::productFields()),
                         Tabs\Tab::make('Poster')->schema(self::posterFields()),
                         Tabs\Tab::make('SEO')->schema(self::seoFields()),
                         Tabs\Tab::make('Publikasi')->schema(self::publicationFields()),
@@ -262,6 +265,98 @@ class LocationPageForm
                         }),
                 ]),
         ];
+    }
+
+    /**
+     * Pemilihan produk untuk section produk halaman ini.
+     *
+     * CRUD Produk tetap satu-satunya sumber datanya: yang disimpan di sini
+     * hanyalah RELASI. Nama, kategori, harga, foto, dan deskripsi selalu
+     * dibaca ulang dari tabel products saat halaman dirender.
+     *
+     * Perilaku saklar yang perlu dijaga: mematikan "Tampilkan Produk" hanya
+     * MENYEMBUNYIKAN pilihannya. Filament membuang state komponen tersembunyi
+     * dari data terdehidrasi, sehingga halaman Create/Edit tidak menerima
+     * product_ids sama sekali dan relasi lamanya tidak tersentuh. Menyalakan
+     * saklar lagi memunculkan pilihan yang sama persis.
+     *
+     * @return array<mixed>
+     */
+    protected static function productFields(): array
+    {
+        return [
+            Section::make('Section Produk')
+                ->description('Menampilkan kartu produk pada halaman publik. Datanya diambil langsung dari menu Produk, jadi harga dan foto tidak perlu ditulis ulang di sini.')
+                ->schema([
+                    Toggle::make('show_products')
+                        ->label('Tampilkan Produk')
+                        ->helperText('Mematikan saklar ini menyembunyikan section-nya, TETAPI tidak menghapus pilihan produknya. Menyalakannya lagi memunculkan pilihan yang sama.')
+                        ->default(false)
+                        ->live(),
+
+                    Select::make('product_ids')
+                        ->label('Pilih Produk')
+                        ->helperText('Urutannya mengikuti urutan pada menu Produk, bukan urutan pemilihan di sini. Saklar "Sorot di homepage" pada produk tidak berpengaruh di halaman ini.')
+                        /*
+                         | Label memuat kategori, tipe, dan status supaya admin
+                         | tidak perlu membuka menu Produk untuk memastikan apa
+                         | yang sedang dipilih. Produk nonaktif tetap boleh
+                         | dipilih -- halaman publiklah yang menyembunyikannya.
+                         */
+                        ->options(fn (?LocationPage $record): array => app(LocationPageProductService::class)
+                            ->options($record?->products()->pluck('products.id')->all() ?? []))
+                        ->multiple()
+                        ->searchable()
+                        ->preload()
+                        ->visible(fn (Get $get): bool => (bool) $get('show_products'))
+                        ->required(fn (Get $get): bool => (bool) $get('show_products'))
+                        ->validationMessages([
+                            'required' => 'Pilih minimal satu produk selama "Tampilkan Produk" dinyalakan.',
+                        ])
+                        ->rule(function (): callable {
+                            return function (string $attribute, mixed $value, callable $fail): void {
+                                /*
+                                 | Pemeriksaan server-side yang sesungguhnya.
+                                 | Payload yang disisipkan langsung ke request
+                                 | Livewire menempuh jalur ini juga, jadi id
+                                 | karangan tetap ditolak.
+                                 */
+                                $service = app(LocationPageProductService::class);
+
+                                try {
+                                    $service->assertProductsExist($service->normalizeIds($value));
+                                } catch (ValidationException $exception) {
+                                    $fail($exception->validator->errors()->first('product_ids'));
+                                }
+                            };
+                        }),
+
+                    Placeholder::make('product_selection_note')
+                        ->label('Catatan')
+                        ->visible(fn (Get $get): bool => ! $get('show_products'))
+                        ->content(fn (?LocationPage $record): HtmlString => new HtmlString(
+                            self::hiddenProductsNote($record)
+                        )),
+                ]),
+        ];
+    }
+
+    /**
+     * Keterangan saat section produk dimatikan.
+     *
+     * Menyebutkan jumlah pilihan yang tersimpan supaya admin tahu relasinya
+     * masih ada dan tidak perlu memilih ulang.
+     */
+    protected static function hiddenProductsNote(?LocationPage $record): string
+    {
+        $count = $record?->exists ? $record->products()->count() : 0;
+
+        if ($count === 0) {
+            return 'Section produk dimatikan. Nyalakan saklar di atas untuk memilih produk.';
+        }
+
+        return 'Section produk dimatikan, tetapi <strong>'.$count.' produk</strong> yang pernah dipilih '
+            .'tetap tersimpan. Nyalakan saklar di atas untuk memunculkannya kembali.';
     }
 
     /**
