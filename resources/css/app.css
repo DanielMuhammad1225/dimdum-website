@@ -93,3 +93,55 @@
 @utility animate-brand-float {
     animation: brand-float 6s ease-in-out infinite;
 }
+
+/*
+|--------------------------------------------------------------------------
+| Dialog menu produk
+|--------------------------------------------------------------------------
+| <dialog> tidak bisa diposisikan sepenuhnya lewat utility Tailwind: margin
+| bawaannya (`auto`) memusatkannya, dan itu justru yang TIDAK diinginkan pada
+| mobile. Aturan di bawah menempelkannya ke bawah layar sebagai bottom sheet,
+| lalu mengembalikannya ke tengah pada layar besar.
+|
+| Backdrop-nya sendiri sudah diwarnai lewat varian `backdrop:` pada markup.
+*/
+dialog[data-menu-modal] {
+    /* Menempel ke bawah, selebar layar: pola bottom sheet. */
+    margin: auto auto 0;
+    width: 100%;
+    max-width: none;
+    border: 0;
+    animation: menu-sheet-in 200ms ease-out;
+}
+
+dialog[data-menu-modal]::backdrop {
+    animation: menu-backdrop-in 200ms ease-out;
+}
+
+@media (min-width: 640px) {
+    dialog[data-menu-modal] {
+        /* Dialog di tengah pada desktop. */
+        margin: auto;
+        max-width: 48rem;
+        animation-name: menu-dialog-in;
+    }
+}
+
+@keyframes menu-sheet-in {
+    from {
+        transform: translateY(100%);
+    }
+}
+
+@keyframes menu-dialog-in {
+    from {
+        opacity: 0;
+        transform: scale(0.97);
+    }
+}
+
+@keyframes menu-backdrop-in {
+    from {
+        opacity: 0;
+    }
+}

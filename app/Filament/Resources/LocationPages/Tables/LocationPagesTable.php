@@ -87,7 +87,7 @@ class LocationPagesTable
                         : null),
 
                 IconColumn::make('is_featured')
-                    ->label('Sorot')
+                    ->label('Homepage')
                     ->boolean()
                     ->alignCenter()
                     ->toggleable(),
@@ -129,8 +129,8 @@ class LocationPagesTable
                     ->placeholder('Semua'),
 
                 TernaryFilter::make('is_featured')
-                    ->label('Sorotan homepage')
-                    ->trueLabel('Disorot')
+                    ->label('Tampil di homepage')
+                    ->trueLabel('Ditampilkan')
                     ->falseLabel('Tidak')
                     ->placeholder('Semua'),
 

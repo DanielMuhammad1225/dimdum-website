@@ -178,7 +178,22 @@ class LocationPage extends Model
         return $query->active()->withinPeriod();
     }
 
-    public function scopeFeatured(Builder $query): Builder
+    /**
+     * Halaman yang dipilih untuk tampil di homepage.
+     *
+     * Kolomnya tetap bernama is_featured. Dulu ia hanya menentukan URUTAN --
+     * halaman sorotan tampil lebih dulu -- sedangkan seluruh halaman yang
+     * tampil publik ikut masuk homepage. Kini ia yang menentukan KEANGGOTAAN.
+     *
+     * Namanya sengaja TIDAK diganti dan kolom baru sengaja TIDAK dibuat:
+     * keduanya menjawab pertanyaan yang sama persis, dan dua kolom untuk satu
+     * pertanyaan hanya akan bisa saling bertentangan. Nama scope-nya yang
+     * disesuaikan supaya kode terbaca sesuai artinya sekarang, sejalan dengan
+     * Product::scopeOnHomepage().
+     *
+     * Saklar ini TIDAK memengaruhi bisa-tidaknya halaman dibuka lewat URL.
+     */
+    public function scopeOnHomepage(Builder $query): Builder
     {
         return $query->where($query->qualifyColumn('is_featured'), true);
     }

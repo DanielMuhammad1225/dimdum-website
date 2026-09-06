@@ -31,7 +31,10 @@ class PublicLocationPageTest extends TestCase
      */
     protected function visiblePage(array $groups, array $locations, array $attributes = []): LocationPage
     {
-        $page = LocationPage::factory()->create($attributes);
+        // onHomepage() sejak saklar "Tampilkan di Homepage" menentukan
+        // keanggotaan: test di kelas ini menguji aturan visibilitas lain,
+        // jadi halamannya dibuat sudah dipilih untuk homepage.
+        $page = LocationPage::factory()->onHomepage()->create($attributes);
 
         $page->groups()->attach(array_map(fn (LocationGroup $g): int => $g->getKey(), $groups));
         $page->locations()->attach(array_map(fn (Location $l): int => $l->getKey(), $locations));

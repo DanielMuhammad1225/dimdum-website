@@ -462,8 +462,19 @@ class LocationPageCatalogService
     /**
      * Halaman slug untuk section lokasi di homepage.
      *
-     * Hanya halaman yang tampil DAN benar-benar punya gerobak layak tampil.
-     * Halaman sorotan didahulukan.
+     * Empat syarat, seluruhnya wajib:
+     *   1. tampil publik (aktif, dalam periode, tidak terhapus);
+     *   2. saklar "Tampilkan di Homepage" menyala;
+     *   3. punya gerobak yang benar-benar layak tampil;
+     *   4. masuk batas jumlah.
+     *
+     * Syarat kedua BARU. Sebelumnya seluruh halaman yang tampil publik ikut
+     * masuk homepage dan is_featured hanya menentukan urutannya; kini ia yang
+     * menentukan keanggotaan, sehingga orderByDesc atasnya tidak lagi berarti
+     * apa-apa -- semua baris di sini pasti bernilai true.
+     *
+     * Halaman yang saklarnya mati TETAP dapat dibuka lewat URL-nya. Yang
+     * dimatikan hanyalah kemunculannya di homepage.
      *
      * @return list<array<string, mixed>>
      */
@@ -475,10 +486,10 @@ class LocationPageCatalogService
             fn (): array => $this->guardMissingTable(function () use ($limit): array {
                 $pages = LocationPage::query()
                     ->publiclyVisible()
+                    ->onHomepage()
                     ->hasVisibleLocations()
                     ->withCount(['locations as visible_locations_count' => fn (Builder $query) => $query
                         ->effectivelyVisible()])
-                    ->orderByDesc('is_featured')
                     ->ordered()
                     ->limit($limit)
                     ->get();
@@ -489,7 +500,6 @@ class LocationPageCatalogService
                     'slug' => $page->slug,
                     'short_description' => $this->cleanText($page->short_description),
                     'period_text' => $this->cleanText($page->period_text),
-                    'is_featured' => (bool) $page->is_featured,
                     'location_count' => (int) $page->visible_locations_count,
                     'poster' => $this->posterPayload($page),
                     'url' => route('location-pages.show', $page->slug),
@@ -521,6 +531,8 @@ class LocationPageCatalogService
                     ->map(fn (LocationPage $page): array => [
                         'loc' => route('location-pages.show', $page->slug),
                         'lastmod' => $page->updated_at?->toAtomString() ?? '',
+                        // Halaman yang tampil di homepage diberi prioritas
+                        // lebih tinggi: ia memang pintu masuk utama situs.
                         'priority' => $page->is_featured ? '0.9' : '0.7',
                     ])
                     ->all();

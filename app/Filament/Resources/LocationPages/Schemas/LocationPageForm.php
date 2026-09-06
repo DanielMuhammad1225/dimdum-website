@@ -420,9 +420,15 @@ class LocationPageForm
                 ->disabled(fn (): bool => ! self::canPublish())
                 ->dehydrated(fn (): bool => self::canPublish()),
 
+            /*
+             | Kolomnya tetap is_featured. Dulu ia hanya menentukan urutan;
+             | kini ia menentukan keanggotaan daftar lokasi di homepage.
+             | Kolom baru sengaja tidak dibuat -- keduanya menjawab pertanyaan
+             | yang sama dan hanya akan bisa saling bertentangan.
+             */
             Toggle::make('is_featured')
-                ->label('Sorot di homepage')
-                ->helperText('Halaman sorotan tampil lebih dulu pada daftar lokasi di homepage.'),
+                ->label('Tampilkan di Homepage')
+                ->helperText('Hanya halaman yang saklarnya menyala dan punya gerobak tampil yang masuk daftar lokasi di homepage. Mematikannya TIDAK menutup halaman ini -- URL-nya tetap dapat dibuka.'),
         ];
     }
 

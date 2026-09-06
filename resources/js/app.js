@@ -47,3 +47,54 @@ if (toggle && menu) {
         }
     });
 }
+
+/**
+ * Dialog menu produk pada halaman lokasi.
+ *
+ * Dibangun di atas <dialog> asli. showModal() sudah menangani focus trap,
+ * Escape, latar inert, dan pengembalian fokus ke elemen pemicu -- semuanya
+ * dijamin browser, bukan ditiru dengan JavaScript yang mudah salah.
+ *
+ * Yang tersisa di sini hanya dua hal yang memang TIDAK ditangani <dialog>:
+ *
+ *   1. Klik overlay. Klik pada backdrop menargetkan elemen <dialog> itu
+ *      sendiri, sehingga cukup dibandingkan dengan event.target. Isi dialog
+ *      dibungkus elemen lain, jadi klik di dalamnya tidak pernah lolos.
+ *   2. Kunci scroll halaman. <dialog> membuat latar inert tetapi tidak
+ *      menghentikan scroll body, yang pada mobile membuat halaman ikut
+ *      bergeser di belakang bottom sheet.
+ *
+ * Tanpa JavaScript, tombolnya tetap tidak menyesatkan: ia menaut ke id
+ * dialognya lewat aria-controls dan tidak menjanjikan apa pun yang gagal.
+ */
+const menuModal = document.querySelector('[data-menu-modal]');
+
+if (menuModal && typeof menuModal.showModal === 'function') {
+    const openers = document.querySelectorAll('[data-menu-modal-open]');
+    const body = document.body;
+
+    const lockScroll = (locked) => {
+        body.style.overflow = locked ? 'hidden' : '';
+    };
+
+    openers.forEach((opener) => {
+        opener.addEventListener('click', () => {
+            menuModal.showModal();
+            lockScroll(true);
+        });
+    });
+
+    menuModal.querySelectorAll('[data-menu-modal-close]').forEach((closer) => {
+        closer.addEventListener('click', () => menuModal.close());
+    });
+
+    // Klik pada backdrop menargetkan <dialog> itu sendiri.
+    menuModal.addEventListener('click', (event) => {
+        if (event.target === menuModal) {
+            menuModal.close();
+        }
+    });
+
+    // Menutup lewat tombol, overlay, maupun Escape sama-sama berakhir di sini.
+    menuModal.addEventListener('close', () => lockScroll(false));
+}

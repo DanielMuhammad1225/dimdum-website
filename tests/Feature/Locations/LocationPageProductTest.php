@@ -413,7 +413,7 @@ class LocationPageProductTest extends TestCase
 
     // --------------------------------------------------------------- publik
 
-    public function test_the_section_is_absent_while_the_toggle_is_off(): void
+    public function test_the_menu_button_is_absent_while_the_toggle_is_off(): void
     {
         $product = Product::factory()->create(['name' => 'Dimsum Ayam']);
         $page = $this->pageWithProducts($product);
@@ -421,18 +421,19 @@ class LocationPageProductTest extends TestCase
 
         $this->get('/alamat/alamat-produk')
             ->assertOk()
-            ->assertDontSee('Produk yang Tersedia', false)
+            ->assertDontSee('Lihat Menu', false)
+            ->assertDontSee('data-menu-modal', false)
             ->assertDontSee('Dimsum Ayam', false);
     }
 
-    public function test_the_section_shows_the_selected_products(): void
+    public function test_the_modal_shows_the_selected_products(): void
     {
         $product = Product::factory()->withNumericPrice(5000)->create(['name' => 'Dimsum Ayam']);
         $this->pageWithProducts($product);
 
         $this->get('/alamat/alamat-produk')
             ->assertOk()
-            ->assertSee('Produk yang Tersedia', false)
+            ->assertSee('Lihat Menu', false)
             ->assertSee('Dimsum Ayam', false)
             ->assertSee('Rp5.000', false);
     }
@@ -485,18 +486,19 @@ class LocationPageProductTest extends TestCase
      * Seluruh produk terpilih menjadi nonaktif: section-nya hilang rapi tanpa
      * judul menggantung, kartu kosong, atau gambar rusak.
      */
-    public function test_the_section_disappears_when_every_product_becomes_inactive(): void
+    public function test_the_button_and_modal_disappear_when_every_product_becomes_inactive(): void
     {
         $product = Product::factory()->create(['name' => 'Dimsum Ayam']);
         $this->pageWithProducts($product);
 
-        $this->get('/alamat/alamat-produk')->assertOk()->assertSee('Produk yang Tersedia', false);
+        $this->get('/alamat/alamat-produk')->assertOk()->assertSee('Lihat Menu', false);
 
         $product->update(['is_active' => false]);
 
         $response = $this->get('/alamat/alamat-produk')->assertOk();
 
-        $response->assertDontSee('Produk yang Tersedia', false);
+        $response->assertDontSee('Lihat Menu', false);
+        $response->assertDontSee('data-menu-modal', false);
         $response->assertDontSee('<img src=""', false);
         $response->assertDontSee('Dimsum Ayam', false);
     }
@@ -524,7 +526,7 @@ class LocationPageProductTest extends TestCase
 
         $html = $this->get('/alamat/alamat-produk')->assertOk()->getContent();
 
-        $this->assertLessThan(strpos($html, 'Pertama'), strpos($html, 'Produk yang Tersedia'));
+        $this->assertLessThan(strpos($html, 'Pertama'), strpos($html, 'Menu DIMDUM'));
         $this->assertLessThan(strpos($html, 'Kedua'), strpos($html, 'Pertama'));
         $this->assertLessThan(strpos($html, 'Ketiga'), strpos($html, 'Kedua'));
     }

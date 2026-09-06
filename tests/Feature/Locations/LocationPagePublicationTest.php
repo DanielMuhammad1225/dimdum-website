@@ -63,7 +63,9 @@ class LocationPagePublicationTest extends TestCase
     {
         [$group, $location] = $this->groupWithLocation();
 
-        $page = LocationPage::factory()->create($attributes);
+        // onHomepage() sejak saklar "Tampilkan di Homepage" menentukan
+        // keanggotaan: kelas ini menguji aturan publikasi, bukan saklar itu.
+        $page = LocationPage::factory()->onHomepage()->create($attributes);
         $page->groups()->attach($group);
         $page->locations()->attach($location);
 

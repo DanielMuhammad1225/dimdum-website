@@ -70,7 +70,8 @@ class LocationPageFactory extends Factory
         ]);
     }
 
-    public function featured(): static
+    /** Dipilih untuk tampil di daftar lokasi homepage. */
+    public function onHomepage(): static
     {
         return $this->state(fn (): array => ['is_featured' => true]);
     }

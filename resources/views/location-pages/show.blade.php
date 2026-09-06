@@ -43,6 +43,30 @@
                             </a>
                         @endif
 
+                        {{-- Menu produk dibuka sebagai dialog, bukan section
+                             permanen: daftar produk sama di setiap halaman
+                             lokasi, jadi menaruhnya di alur baca hanya
+                             mendorong titik gerobak makin ke bawah.
+
+                             Tombolnya HANYA ada bila service benar-benar
+                             mengembalikan produk yang layak tampil, sehingga
+                             tidak pernah ada tombol yang membuka dialog
+                             kosong. Tanpa JavaScript pun tombol ini tidak
+                             menyesatkan: ia menaut ke id dialognya. --}}
+                        @if (! empty($page['products']))
+                            <button
+                                type="button"
+                                data-menu-modal-open
+                                aria-haspopup="dialog"
+                                aria-controls="menu-produk"
+                                class="inline-flex min-h-11 items-center gap-2 rounded-pill border-2 border-brand-brown/15 bg-white px-6 py-3.5 text-sm font-semibold text-brand-brown shadow-sticker transition-colors hover:border-brand-brown/30 sm:text-base">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                    <path d="M4 7h16M4 12h16M4 17h10" />
+                                </svg>
+                                Lihat Menu
+                            </button>
+                        @endif
+
                         {{-- CTA hanya dirender bila teks DAN URL-nya sama-sama
                              lolos pemeriksaan di service. Tidak pernah ada
                              tombol mati di halaman ini. --}}
@@ -146,44 +170,71 @@
     </section>
 
     {{--
-        Section produk.
+        Dialog menu produk.
 
         Satu pemeriksaan saja: daftarnya kosong atau tidak. Service sudah
         memutuskan segalanya -- saklar mati, produk nonaktif, produk terhapus,
-        maupun berkas foto yang hilang -- sehingga di sini tidak ada kartu
-        kosong maupun gambar rusak yang mungkin terbentuk.
+        maupun berkas foto yang hilang -- sehingga di sini tidak pernah ada
+        kartu kosong maupun gambar rusak.
 
-        Kartunya memakai komponen yang sama dengan homepage, jadi nama, foto,
-        emoji cadangan, dan aturan label harga tidak pernah dituliskan dua
-        kali. Deskripsi sengaja tidak diteruskan: kartu di sini seringkas
-        kartu homepage.
+        Memakai <dialog> asli, bukan div buatan sendiri: showModal() memberi
+        focus trap, Escape, latar inert, dan pengembalian fokus ke tombol
+        pembuka secara gratis dari browser. Yang tersisa untuk JavaScript
+        hanyalah klik overlay dan kunci scroll halaman -- dua hal yang memang
+        tidak ditangani <dialog>. Tidak ada dependency baru.
+
+        Kartunya memakai komponen yang sama dengan homepage, jadi aturan foto,
+        emoji cadangan, dan label harga tidak pernah dituliskan dua kali.
+        Deskripsi sengaja tidak diteruskan, dan TIDAK ADA tombol detail:
+        halaman detail produk belum ada, jadi tombolnya hanya akan mati.
     --}}
     @if (! empty($page['products']))
-        <section id="produk" class="bg-brand-cream py-12 sm:py-16" aria-labelledby="produk-judul">
-            <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-                <h2 id="produk-judul" class="font-display text-2xl font-bold text-brand-brown sm:text-3xl">
-                    Produk yang Tersedia
-                </h2>
+        <dialog
+            id="menu-produk"
+            data-menu-modal
+            aria-labelledby="menu-produk-judul"
+            class="w-full max-w-3xl rounded-t-card bg-brand-cream-soft p-0 text-brand-brown backdrop:bg-brand-brown/50 sm:rounded-card">
+            <div class="flex max-h-[85dvh] flex-col sm:max-h-[80dvh]">
+                {{-- Pegangan seret khas bottom sheet; dekoratif saja. --}}
+                <div class="pt-3 sm:hidden" aria-hidden="true">
+                    <span class="mx-auto block h-1.5 w-10 rounded-pill bg-brand-brown/20"></span>
+                </div>
 
-                <ul class="mt-8 grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3 lg:grid-cols-4">
-                    @foreach ($page['products'] as $product)
-                        <li>
-                            <x-product-card
-                                :name="$product['name']"
-                                :price="$product['price']"
-                                :image="$product['image']"
-                                :emoji="$product['emoji']" />
-                        </li>
-                    @endforeach
-                </ul>
+                <div class="flex items-start justify-between gap-4 border-b-2 border-brand-brown/10 px-5 py-4 sm:px-6">
+                    <div>
+                        <h2 id="menu-produk-judul" class="font-display text-xl font-bold text-brand-brown sm:text-2xl">
+                            Menu DIMDUM
+                        </h2>
+                        <p class="mt-0.5 text-sm text-brand-brown/65">
+                            Pilihan yang tersedia di {{ $page['title'] }}.
+                        </p>
+                    </div>
 
-                <p class="mt-8 text-sm text-brand-brown/70">
-                    Ketersediaan produk bisa berbeda di setiap gerobak.
-                    <a href="{{ route('products.index') }}" class="font-semibold text-brand-brown underline decoration-brand-orange decoration-2 underline-offset-4 hover:text-brand-orange">
-                        Lihat seluruh produk
-                    </a>
-                </p>
+                    <button
+                        type="button"
+                        data-menu-modal-close
+                        class="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-pill border-2 border-brand-brown/10 bg-white text-brand-brown transition-colors hover:border-brand-brown/30">
+                        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M18 6 6 18M6 6l12 12" />
+                        </svg>
+                        <span class="sr-only">Tutup menu</span>
+                    </button>
+                </div>
+
+                <div class="overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+                    <ul class="grid grid-cols-2 gap-4 sm:gap-5 md:grid-cols-3">
+                        @foreach ($page['products'] as $product)
+                            <li>
+                                <x-product-card
+                                    :name="$product['name']"
+                                    :price="$product['price']"
+                                    :image="$product['image']"
+                                    :emoji="$product['emoji']" />
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
             </div>
-        </section>
+        </dialog>
     @endif
 @endsection
