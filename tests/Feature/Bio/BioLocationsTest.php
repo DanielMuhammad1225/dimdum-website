@@ -4,6 +4,7 @@ namespace Tests\Feature\Bio;
 
 use App\Enums\BioLocationMode;
 use App\Models\Location;
+use App\Models\LocationArea;
 use App\Models\LocationGroup;
 use App\Models\LocationPage;
 use App\Services\BioCatalogService;
@@ -27,15 +28,40 @@ class BioLocationsTest extends TestCase
     }
 
     /**
+     * Halaman slug untuk Bio.
+     *
+     * Secara bawaan setiap Kota/Grup cakupannya diberi satu gerobak terpilih
+     * yang layak tampil: sejak halaman tanpa gerobak layak disembunyikan dari
+     * Bio, itulah keadaan normal halaman yang memang ingin ditampilkan. Test
+     * yang menguji halaman kosong menyatakannya lewat $withCarts = false.
+     *
      * @param  list<LocationGroup>  $groups
      * @param  array<string, mixed>  $attributes
      */
-    protected function page(array $groups, array $attributes = []): LocationPage
+    protected function page(array $groups, array $attributes = [], bool $withCarts = true): LocationPage
     {
         $page = LocationPage::factory()->onBio()->create($attributes);
         $page->groups()->attach(collect($groups)->map->getKey()->all());
 
+        if ($withCarts) {
+            foreach ($groups as $group) {
+                $page->locations()->attach($this->cartIn($group));
+            }
+        }
+
         return $page;
+    }
+
+    /**
+     * Gerobak baru di Area baru di bawah Kota/Grup yang diberikan.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    protected function cartIn(LocationGroup $group, array $attributes = []): Location
+    {
+        return Location::factory()
+            ->for(LocationArea::factory()->for($group, 'group'), 'area')
+            ->create($attributes);
     }
 
     // ------------------------------------------------ mode seluruh gerobak
@@ -449,6 +475,221 @@ class BioLocationsTest extends TestCase
             ->assertSee('Lokasi sedang disiapkan', false);
     }
 
+    // ------------------------------- mode halaman: wajib punya gerobak layak
+
+    public function test_a_page_without_any_selected_cart_is_hidden(): void
+    {
+        $this->pagesMode();
+
+        $group = $this->chain()['group'];
+
+        $this->page([$group], ['title' => 'Halaman Berisi', 'slug' => 'berisi']);
+        $this->page([$group], ['title' => 'Halaman Tanpa Gerobak', 'slug' => 'tanpa-gerobak'], withCarts: false);
+
+        $this->get(route('bio.locations'))
+            ->assertOk()
+            ->assertSee('Halaman Berisi', false)
+            ->assertDontSee('Halaman Tanpa Gerobak', false)
+            ->assertDontSee(route('location-pages.show', 'tanpa-gerobak'), false);
+    }
+
+    public function test_a_page_whose_carts_are_all_inactive_is_hidden(): void
+    {
+        $this->pagesMode();
+
+        $group = $this->chain()['group'];
+        $page = $this->page([$group], ['title' => 'Halaman Gerobak Mati', 'slug' => 'gerobak-mati'], withCarts: false);
+
+        $page->locations()->attach([
+            $this->cartIn($group, ['is_active' => false])->id,
+            $this->cartIn($group, ['is_active' => false])->id,
+        ]);
+
+        $deleted = $this->cartIn($group);
+        $page->locations()->attach($deleted);
+        $deleted->delete();
+
+        $this->get(route('bio.locations'))
+            ->assertOk()
+            ->assertDontSee('Halaman Gerobak Mati', false)
+            ->assertSee('Lokasi sedang disiapkan', false);
+    }
+
+    /**
+     * Gerobak yang aktif tetapi salah satu induknya nonaktif atau terhapus
+     * tidak dihitung -- untuk setiap tingkat.
+     */
+    public function test_an_inactive_or_deleted_parent_hides_the_page(): void
+    {
+        $this->pagesMode();
+
+        $cases = [
+            'area nonaktif' => fn (array $c) => $c['area']->update(['is_active' => false]),
+            'kota/grup nonaktif' => fn (array $c) => $c['group']->update(['is_active' => false]),
+            'provinsi nonaktif' => fn (array $c) => $c['province']->update(['is_active' => false]),
+            /*
+             | Model menolak menghapus Area yang masih punya gerobak, jadi
+             | soft delete-nya ditulis langsung -- supaya yang teruji benar-
+             | benar INDUK yang terhapus sementara gerobaknya sendiri aktif.
+             */
+            'area terhapus' => function (array $c): void {
+                DB::table('location_areas')->where('id', $c['area']->id)->update(['deleted_at' => now()]);
+                LocationPageCatalogService::flushCache();
+            },
+            'provinsi terhapus' => function (array $c): void {
+                DB::table('provinces')->where('id', $c['province']->id)->update(['deleted_at' => now()]);
+                LocationPageCatalogService::flushCache();
+            },
+        ];
+
+        $i = 0;
+
+        foreach ($cases as $label => $breakParent) {
+            $i++;
+            $chain = $this->chain('Prov '.$i, 'Grup '.$i, 'Area '.$i, ['name' => 'Gerobak '.$i]);
+
+            $page = $this->page([$chain['group']], ['title' => 'Halaman '.$label, 'slug' => 'halaman-'.$i], withCarts: false);
+            $page->locations()->attach($chain['location']);
+
+            $breakParent($chain);
+        }
+
+        $html = $this->get(route('bio.locations'))->assertOk()->getContent();
+
+        foreach (array_keys($cases) as $label) {
+            $this->assertStringNotContainsString('Halaman '.$label, $html, "Halaman dengan {$label} masih tampil.");
+        }
+    }
+
+    /**
+     * Cukup SATU gerobak layak di antara gerobak lain yang tidak layak.
+     */
+    public function test_one_visible_cart_is_enough_to_show_the_page(): void
+    {
+        $this->pagesMode();
+
+        $group = $this->chain()['group'];
+        $page = $this->page([$group], ['title' => 'Halaman Satu Hidup', 'slug' => 'satu-hidup'], withCarts: false);
+
+        $page->locations()->attach([
+            $this->cartIn($group, ['is_active' => false])->id,
+            $this->cartIn($group, ['is_active' => false])->id,
+            $this->cartIn($group)->id,
+        ]);
+
+        $this->get(route('bio.locations'))
+            ->assertOk()
+            ->assertSee('Halaman Satu Hidup', false);
+    }
+
+    /**
+     * Banyak gerobak layak -- bahkan di dua provinsi -- tetap SATU kartu.
+     * EXISTS tidak menggandakan baris seperti join biasa.
+     */
+    public function test_many_visible_carts_never_duplicate_the_card(): void
+    {
+        $this->pagesMode();
+
+        $west = $this->chain('Jawa Barat', 'Cianjur', 'Area Barat');
+        $east = $this->chain('Jawa Timur', 'Malang', 'Area Timur');
+
+        $page = $this->page([$west['group'], $east['group']], ['title' => 'Alamat Banyak Gerobak', 'slug' => 'banyak-gerobak']);
+
+        foreach (range(1, 4) as $n) {
+            $page->locations()->attach($this->cartIn($west['group'])->id);
+            $page->locations()->attach($this->cartIn($east['group'])->id);
+        }
+
+        $href = 'href="'.route('location-pages.show', 'banyak-gerobak').'"';
+
+        $all = $this->get(route('bio.locations'))->assertOk()->getContent();
+        $this->assertSame(1, substr_count($all, $href), 'Kartu terduplikasi oleh gerobak lain.');
+        $this->assertSame(1, substr_count($all, '<article'));
+
+        foreach ([$west, $east] as $chain) {
+            $filtered = $this->get(route('bio.locations', ['provinsi' => $chain['province']->id]))->assertOk()->getContent();
+            $this->assertSame(1, substr_count($filtered, $href));
+        }
+    }
+
+    /**
+     * Gerobak yang layak tetapi sudah berada di luar cakupan Kota/Grup
+     * halaman tidak dihitung: /alamat/{slug} memang tidak menampilkannya,
+     * jadi Bio tidak boleh menaut ke halaman yang isinya kosong.
+     */
+    public function test_a_visible_cart_outside_the_page_scope_does_not_count(): void
+    {
+        $this->pagesMode();
+
+        $covered = $this->chain('Jawa Barat', 'Cianjur', 'Area 1')['group'];
+        $elsewhere = $this->chain('Jawa Barat', 'Sukabumi', 'Area 2')['group'];
+
+        $page = $this->page([$covered], ['title' => 'Halaman Salah Cakupan', 'slug' => 'salah-cakupan'], withCarts: false);
+        // Ditulis langsung ke pivot, melewati pemeriksaan cakupan form.
+        $page->locations()->attach($this->cartIn($elsewhere));
+
+        $this->get(route('bio.locations'))->assertOk()->assertDontSee('Halaman Salah Cakupan', false);
+    }
+
+    /**
+     * Penyaringan Bio tidak mengubah URL langsung: halamannya tetap 200
+     * dengan empty state miliknya sendiri.
+     */
+    public function test_a_hidden_page_keeps_its_direct_url_and_empty_state(): void
+    {
+        $this->pagesMode();
+
+        $group = $this->chain()['group'];
+        $this->page([$group], ['title' => 'Halaman Tanpa Gerobak', 'slug' => 'tanpa-gerobak'], withCarts: false);
+
+        $this->get(route('bio.locations'))->assertOk()->assertDontSee('Halaman Tanpa Gerobak', false);
+
+        $this->get(route('location-pages.show', 'tanpa-gerobak'))
+            ->assertOk()
+            ->assertSee('Halaman Tanpa Gerobak', false)
+            ->assertSee('Titik gerobak sedang disiapkan', false);
+    }
+
+    /**
+     * Status gerobak dan hierarkinya langsung tercermin -- ke dua arah --
+     * tanpa kait cache baru di model mana pun.
+     */
+    public function test_cart_and_hierarchy_changes_toggle_the_page_immediately(): void
+    {
+        $this->pagesMode();
+
+        $chain = $this->chain();
+        $page = $this->page([$chain['group']], ['title' => 'Halaman Hidup Mati', 'slug' => 'hidup-mati'], withCarts: false);
+        $page->locations()->attach($chain['location']);
+
+        $see = fn () => $this->get(route('bio.locations'))->assertOk()->assertSee('Halaman Hidup Mati', false);
+        $miss = fn () => $this->get(route('bio.locations'))->assertOk()->assertDontSee('Halaman Hidup Mati', false);
+
+        $see();
+
+        $chain['location']->update(['is_active' => false]);
+        $miss();
+
+        $chain['location']->update(['is_active' => true]);
+        $see();
+
+        $chain['province']->update(['is_active' => false]);
+        $miss();
+
+        $chain['province']->update(['is_active' => true]);
+        $see();
+
+        $chain['area']->update(['is_active' => false]);
+        $miss();
+
+        $chain['area']->update(['is_active' => true]);
+        $chain['location']->delete();
+        $miss();
+
+        $chain['location']->restore();
+        $see();
+    }
+
     // ----------------------------------------------------------------- cache
 
     /**
@@ -543,7 +784,33 @@ class BioLocationsTest extends TestCase
         $many = $this->locationQueries();
 
         $this->assertSame($few, $many, 'Query bertambah seiring jumlah halaman.');
-        $this->assertLessThanOrEqual(3, $few);
+        // Halaman, Kota/Grup, Provinsi. Syarat "punya gerobak layak" hidup di
+        // dalam query halaman sebagai EXISTS, bukan query tambahan.
+        $this->assertSame(3, $few);
+
+        $this->get(route('bio.locations'))->assertOk()->assertSee(route('location-pages.show', 'halaman-8'), false);
+    }
+
+    /**
+     * Jumlah gerobak per halaman juga tidak menambah query: syarat gerobak
+     * layak tidak pernah dicek per baris.
+     */
+    public function test_the_query_count_does_not_grow_with_carts_per_page(): void
+    {
+        $this->pagesMode();
+
+        $group = $this->chain('Prov 1', 'Grup 1', 'Area 1')['group'];
+        $page = $this->page([$group], ['slug' => 'satu']);
+        $few = $this->locationQueries();
+
+        foreach (range(1, 12) as $n) {
+            $page->locations()->attach($this->cartIn($group, ['is_active' => $n % 2 === 0])->id);
+        }
+
+        $many = $this->locationQueries();
+
+        $this->assertSame($few, $many, 'Query bertambah seiring jumlah gerobak per halaman.');
+        $this->assertSame(3, $many);
     }
 
     /**

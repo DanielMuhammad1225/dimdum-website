@@ -323,13 +323,33 @@ class BioCatalogService
     /**
      * Mode location_pages: Halaman Slug Lokasi yang dipilih untuk Bio.
      *
-     * Empat syarat, persis seperti yang diminta: aktif, tidak terhapus
-     * (global scope), masih dalam periode bila diisi, dan show_on_bio.
+     * Lima syarat: aktif, tidak terhapus (global scope), masih dalam periode
+     * bila diisi, show_on_bio, DAN punya minimal satu gerobak terpilih yang
+     * layak tampil.
+     *
+     * Syarat kelima memakai hasVisibleLocations() -- scope yang sama dengan
+     * daftar lokasi homepage. Isinya Location::effectivelyVisible() (gerobak
+     * serta Area, Kota/Grup, dan Provinsinya aktif dan tidak terhapus)
+     * DITAMBAH syarat bahwa gerobak itu masih berada di cakupan Kota/Grup
+     * halaman. Syarat tambahan itu persis aturan yang dipakai /alamat/{slug}
+     * saat merender daftar gerobaknya, sehingga Bio tidak pernah menaut ke
+     * halaman yang ternyata hanya menampilkan empty state.
+     *
+     * Disaring di query sebagai satu EXISTS, bukan di Blade dan bukan per
+     * baris: jumlah query tidak bertambah seiring jumlah halaman maupun
+     * jumlah gerobak. Halaman dengan banyak gerobak tetap satu baris hasil.
+     *
+     * URL /alamat/{slug} TIDAK terpengaruh: halaman yang tersaring di sini
+     * tetap dapat dibuka langsung dan menampilkan empty state miliknya.
      *
      * Wilayah untuk filter diambil dari cakupan Kota/Grup halaman. Karena
      * satu halaman bisa mencakup beberapa Kota/Grup -- bahkan beberapa
      * provinsi -- ia menyimpan DAFTAR id, bukan satu id. Halaman tetap satu
      * baris: cocok untuk beberapa filter, tetapi tidak pernah tampil ganda.
+     *
+     * Invalidasi tidak butuh kait baru: seluruh model hierarki dan gerobak
+     * sudah menaikkan versi cache halaman lokasi, dan kunci cache payload ini
+     * memuat versi tersebut.
      *
      * Tiga query tetap: halaman, Kota/Grup, Provinsi.
      *
@@ -340,6 +360,7 @@ class BioCatalogService
         $pages = LocationPage::query()
             ->publiclyVisible()
             ->onBio()
+            ->hasVisibleLocations()
             ->with(['groups' => fn ($query) => $query
                 ->effectivelyVisible()
                 ->with('province')
