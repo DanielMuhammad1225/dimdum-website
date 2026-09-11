@@ -2,15 +2,19 @@
 
 namespace Tests\Feature\Admin;
 
+use App\Enums\BioLocationMode;
 use App\Enums\ProductCategory;
 use App\Enums\ProductType;
+use App\Enums\SocialIcon;
 use App\Enums\UserRole;
+use App\Models\BioSetting;
 use App\Models\Location;
 use App\Models\LocationArea;
 use App\Models\LocationGroup;
 use App\Models\LocationPage;
 use App\Models\Product;
 use App\Models\Province;
+use App\Models\SocialLink;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Filament\Facades\Filament;
@@ -592,6 +596,71 @@ class AdminLivewireSessionTest extends TestCase
         $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menata urutan produk.');
         $this->assertSame(1, (int) $second->fresh()->sort_order);
         $this->assertStillSignedIn('Setelah reorder produk');
+    }
+
+    // ---------------------------------------------------------------- bio
+
+    public function test_saving_the_bio_settings_keeps_the_user_signed_in(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $page = $this->browserGet('/admin/pengaturan-bio');
+        $page->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($page->getContent(), 'ManageBioSettings', [
+            'data.is_active' => true,
+            'data.title' => 'Bio Uji Session',
+            'data.location_mode' => BioLocationMode::AllActiveLocations->value,
+        ], [['path' => '', 'method' => 'save', 'params' => []]])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menyimpan Pengaturan Bio.');
+        $this->assertSame('Bio Uji Session', BioSetting::query()->value('title'));
+        $this->assertStillSignedIn('Setelah simpan Pengaturan Bio');
+    }
+
+    public function test_creating_a_social_link_keeps_the_user_signed_in(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $page = $this->browserGet('/admin/social-media/create');
+        $page->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($page->getContent(), 'CreateSocialLink', [
+            'data.name' => 'Instagram Uji Session',
+            'data.url' => 'https://www.instagram.test/dimdum',
+            'data.icon' => SocialIcon::Instagram->value,
+        ], [['path' => '', 'method' => 'create', 'params' => []]])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah membuat Social Media.');
+        $this->assertDatabaseHas('social_links', ['name' => 'Instagram Uji Session']);
+        $this->assertStillSignedIn('Setelah create Social Media');
+    }
+
+    public function test_reordering_social_links_keeps_the_session(): void
+    {
+        $this->logIn($this->superAdmin());
+
+        $first = SocialLink::factory()->create(['sort_order' => 1]);
+        $second = SocialLink::factory()->create(['sort_order' => 2]);
+
+        $list = $this->browserGet('/admin/social-media');
+        $list->assertOk();
+
+        $before = $this->sessionId();
+
+        $this->livewireUpdate($list->getContent(), 'ListSocialLinks', [], [
+            ['path' => '', 'method' => 'reorderTable', 'params' => [
+                [(string) $second->getKey(), (string) $first->getKey()],
+            ]],
+        ])->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menata urutan Social Media.');
+        $this->assertSame(1, (int) $second->fresh()->sort_order);
+        $this->assertStillSignedIn('Setelah reorder Social Media');
     }
 
     /**

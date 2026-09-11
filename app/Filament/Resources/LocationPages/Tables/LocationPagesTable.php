@@ -92,6 +92,12 @@ class LocationPagesTable
                     ->alignCenter()
                     ->toggleable(),
 
+                IconColumn::make('show_on_bio')
+                    ->label('Bio')
+                    ->boolean()
+                    ->alignCenter()
+                    ->toggleable(),
+
                 IconColumn::make('is_active')
                     ->label('Aktif')
                     ->boolean()
@@ -130,6 +136,12 @@ class LocationPagesTable
 
                 TernaryFilter::make('is_featured')
                     ->label('Tampil di homepage')
+                    ->trueLabel('Ditampilkan')
+                    ->falseLabel('Tidak')
+                    ->placeholder('Semua'),
+
+                TernaryFilter::make('show_on_bio')
+                    ->label('Tampil di Bio')
                     ->trueLabel('Ditampilkan')
                     ->falseLabel('Tidak')
                     ->placeholder('Semua'),

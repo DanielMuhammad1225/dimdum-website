@@ -76,6 +76,12 @@ class LocationPageFactory extends Factory
         return $this->state(fn (): array => ['is_featured' => true]);
     }
 
+    /** Dipilih untuk mode "Halaman Slug Lokasi terpilih" di /bio/lokasi. */
+    public function onBio(): static
+    {
+        return $this->state(fn (): array => ['show_on_bio' => true]);
+    }
+
     /** Section produk dinyalakan. Pilihan produknya dipasang test sendiri. */
     public function showingProducts(): static
     {

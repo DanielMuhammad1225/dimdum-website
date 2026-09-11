@@ -44,6 +44,7 @@ class Product extends Model
         'emoji',
         'is_active',
         'show_on_homepage',
+        'show_on_bio',
         'created_by',
         'updated_by',
     ];
@@ -59,6 +60,7 @@ class Product extends Model
             'price' => 'integer',
             'is_active' => 'boolean',
             'show_on_homepage' => 'boolean',
+            'show_on_bio' => 'boolean',
             'sort_order' => 'integer',
         ];
     }
@@ -121,6 +123,17 @@ class Product extends Model
     public function scopeOnHomepage(Builder $query): Builder
     {
         return $query->where($query->qualifyColumn('show_on_homepage'), true);
+    }
+
+    /**
+     * Dipilih untuk halaman /bio/produk. Terpisah dari show_on_homepage.
+     *
+     * Tidak perlu kait cache tambahan: saved() di atas sudah menaikkan versi
+     * katalog produk, dan kunci cache Bio ikut memuat versi itu.
+     */
+    public function scopeOnBio(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('show_on_bio'), true);
     }
 
     /**

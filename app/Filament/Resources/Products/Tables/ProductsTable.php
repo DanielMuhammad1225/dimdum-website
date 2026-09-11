@@ -102,6 +102,12 @@ class ProductsTable
                     ->boolean()
                     ->alignCenter(),
 
+                IconColumn::make('show_on_bio')
+                    ->label('Bio')
+                    ->boolean()
+                    ->alignCenter()
+                    ->toggleable(),
+
                 IconColumn::make('is_active')
                     ->label('Aktif')
                     ->boolean()
@@ -136,6 +142,12 @@ class ProductsTable
 
                 TernaryFilter::make('show_on_homepage')
                     ->label('Tampil di homepage')
+                    ->trueLabel('Ditampilkan')
+                    ->falseLabel('Tidak')
+                    ->placeholder('Semua'),
+
+                TernaryFilter::make('show_on_bio')
+                    ->label('Tampil di Bio')
                     ->trueLabel('Ditampilkan')
                     ->falseLabel('Tidak')
                     ->placeholder('Semua'),

@@ -55,6 +55,20 @@ enum ProductCategory: string
     }
 
     /**
+     * Seluruh kategori, urut menurut displayOrder().
+     *
+     * @return list<self>
+     */
+    public static function ordered(): array
+    {
+        $categories = self::cases();
+
+        usort($categories, fn (self $a, self $b): int => $a->displayOrder() <=> $b->displayOrder());
+
+        return $categories;
+    }
+
+    /**
      * @return array<string, string>
      */
     public static function options(): array

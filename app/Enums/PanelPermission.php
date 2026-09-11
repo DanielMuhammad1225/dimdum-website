@@ -50,6 +50,10 @@ enum PanelPermission: string
     case ForceDeleteProducts = 'force_delete_products';
     case ManageProductMedia = 'manage_product_media';
 
+    // ---------------------------------------------------------------- bio
+    case ManageBioSettings = 'manage_bio_settings';
+    case ManageSocialLinks = 'manage_social_links';
+
     public function label(): string
     {
         return match ($this) {
@@ -82,6 +86,9 @@ enum PanelPermission: string
             self::DeleteProducts => 'Hapus Produk',
             self::ForceDeleteProducts => 'Hapus Permanen Produk',
             self::ManageProductMedia => 'Kelola Foto Produk',
+
+            self::ManageBioSettings => 'Kelola Pengaturan Bio',
+            self::ManageSocialLinks => 'Kelola Social Media',
         };
     }
 
@@ -143,6 +150,24 @@ enum PanelPermission: string
             self::DeleteProducts,
             self::ForceDeleteProducts,
             self::ManageProductMedia,
+        ];
+    }
+
+    /**
+     * Permission modul Bio.
+     *
+     * Dipisah dua karena mengubah dua hal berbeda: pengaturan halaman
+     * (judul, tombol, nomor WhatsApp, mode lokasi) dan daftar tautan social
+     * media. Keduanya wajah publik yang dibagikan di profil social media,
+     * jadi tidak satu pun diberikan ke Operator.
+     *
+     * @return list<self>
+     */
+    public static function bioCases(): array
+    {
+        return [
+            self::ManageBioSettings,
+            self::ManageSocialLinks,
         ];
     }
 

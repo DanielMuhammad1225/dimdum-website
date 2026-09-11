@@ -173,6 +173,12 @@ class ProductForm
                 ->helperText('Homepage menampilkan maksimal '.ProductCatalogService::HOMEPAGE_LIMIT
                     .' produk. Sisanya tetap terlihat di halaman /produk.')
                 ->default(false),
+
+            // Terpisah dari saklar homepage: isi /bio/produk boleh berbeda.
+            Toggle::make('show_on_bio')
+                ->label('Tampilkan di Bio')
+                ->helperText('Produk yang menyala tampil di halaman /bio/produk. Tidak memengaruhi homepage maupun /produk.')
+                ->default(false),
         ];
     }
 

@@ -50,6 +50,11 @@ class ProductFactory extends Factory
         return $this->state(fn (): array => ['show_on_homepage' => true]);
     }
 
+    public function onBio(): static
+    {
+        return $this->state(fn (): array => ['show_on_bio' => true]);
+    }
+
     public function withNumericPrice(int $price = 5000): static
     {
         return $this->state(fn (): array => ['price' => $price, 'price_text' => null]);

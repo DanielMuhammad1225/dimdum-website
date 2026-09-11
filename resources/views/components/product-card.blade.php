@@ -4,6 +4,7 @@
     'image' => null,
     'emoji' => null,
     'description' => null,
+    'badge' => null,
 ])
 
 {{--
@@ -19,6 +20,9 @@
 
     Label harga hanya dirender bila 'price' terisi -- produk tanpa harga pasti
     tidak menampilkan baris kosong maupun "Rp0".
+
+    'badge' opsional (dipakai /bio/produk untuk tipe produk). Tanpa badge,
+    keluaran kartu identik dengan sebelumnya.
 --}}
 <article class="flex h-full flex-col overflow-hidden rounded-card border-2 border-brand-brown/10 bg-white shadow-sticker">
     @if ($image)
@@ -43,6 +47,10 @@
     @endif
 
     <div class="flex flex-1 flex-col gap-1 p-4">
+        @if ($badge)
+            <p class="self-start rounded-pill bg-brand-cream px-2.5 py-0.5 text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-brand-brown/80">{{ $badge }}</p>
+        @endif
+
         <h3 class="font-display text-base font-semibold leading-snug text-brand-brown sm:text-lg">{{ $name }}</h3>
 
         @if ($price)

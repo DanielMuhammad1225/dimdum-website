@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BioController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\LocationPageController;
 use App\Http\Controllers\ProductController;
@@ -44,3 +45,18 @@ Route::get('/alamat/{slug}', [LocationPageController::class, 'show'])
     ->name('location-pages.show');
 
 Route::get('/sitemap.xml', SitemapController::class)->name('sitemap');
+
+/*
+| Halaman Bio -- tautan yang dipasang di profil social media.
+|
+| Nama route sengaja STABIL: tombol Lokasi dan Menu di /bio menaut lewat nama
+| ini, bukan lewat URL yang disimpan di database. Mengganti mode sumber lokasi
+| tidak mengganti URL /bio/lokasi.
+|
+| Ketiganya noindex dan TIDAK masuk sitemap.
+*/
+Route::prefix('bio')->name('bio.')->group(function (): void {
+    Route::get('/', [BioController::class, 'home'])->name('home');
+    Route::get('/lokasi', [BioController::class, 'locations'])->name('locations');
+    Route::get('/produk', [BioController::class, 'products'])->name('products');
+});

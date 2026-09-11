@@ -88,6 +88,28 @@ class SafeUrl
      */
     public static function isSafeExternal(mixed $value): bool
     {
+        return static::isSafeAbsolute($value, ['https']);
+    }
+
+    /**
+     * Link web: http:// ATAU https://, dengan pemeriksaan yang sama persis.
+     *
+     * Dipakai tautan social media halaman Bio. Aturan lain tidak dilonggarkan
+     * sedikit pun -- userinfo, backslash, karakter kontrol, dan skema
+     * berbahaya tetap ditolak -- hanya skema http yang ikut diterima.
+     */
+    public static function isSafeWeb(mixed $value): bool
+    {
+        return static::isSafeAbsolute($value, ['http', 'https']);
+    }
+
+    /**
+     * Pemeriksaan bersama untuk URL absolut.
+     *
+     * @param  list<string>  $schemes  skema yang boleh, huruf kecil
+     */
+    protected static function isSafeAbsolute(mixed $value, array $schemes): bool
+    {
         if (! is_string($value)) {
             return false;
         }
@@ -100,7 +122,7 @@ class SafeUrl
 
         $scheme = parse_url($value, PHP_URL_SCHEME);
 
-        if (! is_string($scheme) || strtolower($scheme) !== 'https') {
+        if (! is_string($scheme) || ! in_array(strtolower($scheme), $schemes, true)) {
             return false;
         }
 
@@ -159,6 +181,20 @@ class SafeUrl
         $value = trim($value);
 
         return static::isSafeExternal($value) ? $value : null;
+    }
+
+    /**
+     * Versi untuk field yang boleh http maupun https (social media Bio).
+     */
+    public static function sanitizeWeb(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $value = trim($value);
+
+        return static::isSafeWeb($value) ? $value : null;
     }
 
     /**

@@ -62,6 +62,7 @@ class LocationPage extends Model
         'is_active',
         'is_featured',
         'show_products',
+        'show_on_bio',
         'sort_order',
         'created_by',
         'updated_by',
@@ -76,6 +77,7 @@ class LocationPage extends Model
             'is_active' => 'boolean',
             'is_featured' => 'boolean',
             'show_products' => 'boolean',
+            'show_on_bio' => 'boolean',
             'starts_at' => 'datetime',
             'ends_at' => 'datetime',
             'sort_order' => 'integer',
@@ -196,6 +198,18 @@ class LocationPage extends Model
     public function scopeOnHomepage(Builder $query): Builder
     {
         return $query->where($query->qualifyColumn('is_featured'), true);
+    }
+
+    /**
+     * Dipilih untuk mode "Halaman Slug Lokasi terpilih" di /bio/lokasi.
+     *
+     * Terpisah dari scopeOnHomepage(): kedua saklar menjawab pertanyaan yang
+     * berbeda, dan satu halaman boleh tampil di salah satu, keduanya, atau
+     * tidak sama sekali.
+     */
+    public function scopeOnBio(Builder $query): Builder
+    {
+        return $query->where($query->qualifyColumn('show_on_bio'), true);
     }
 
     public function scopeOrdered(Builder $query): Builder

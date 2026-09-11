@@ -429,6 +429,15 @@ class LocationPageForm
             Toggle::make('is_featured')
                 ->label('Tampilkan di Homepage')
                 ->helperText('Hanya halaman yang saklarnya menyala dan punya gerobak tampil yang masuk daftar lokasi di homepage. Mematikannya TIDAK menutup halaman ini -- URL-nya tetap dapat dibuka.'),
+
+            /*
+             | Terpisah dari saklar homepage. Hanya berpengaruh bila Pengaturan
+             | Bio memakai mode "Halaman Slug Lokasi terpilih".
+             */
+            Toggle::make('show_on_bio')
+                ->label('Tampilkan di Bio')
+                ->helperText('Halaman yang menyala tampil di /bio/lokasi saat Pengaturan Bio memakai mode "Halaman Slug Lokasi terpilih". Tidak memengaruhi homepage maupun URL halaman ini.')
+                ->default(false),
         ];
     }
 

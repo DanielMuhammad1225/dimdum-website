@@ -50,6 +50,7 @@ enum UserRole: string
                 ...PanelPermission::locationCases(),
                 ...PanelPermission::locationPageCases(),
                 ...PanelPermission::productCases(),
+                ...PanelPermission::bioCases(),
             ],
 
             /*
@@ -69,6 +70,11 @@ enum UserRole: string
              | Admin dan Super Admin: satu produk yang hilang berarti satu
              | kartu hilang dari homepage tanpa jejak yang bisa dipulihkan
              | Operator sendiri.
+             |
+             | Modul Bio SENGAJA tidak diberikan sama sekali. Halaman Bio
+             | adalah tautan yang dipasang di profil social media: nomor
+             | WhatsApp, tombol, dan daftar tautannya dibuka orang dari luar
+             | situs. Mengubahnya tetap kewenangan Admin dan Super Admin.
              */
             self::Operator => [
                 PanelPermission::AccessAdminPanel,
