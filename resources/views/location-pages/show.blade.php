@@ -7,15 +7,31 @@
     <script type="application/ld+json">@json($structuredData, \App\Services\LocationStructuredData::JSON_FLAGS)</script>
 @endpush
 
+{{-- Halaman ini dibuka dari Bio, jadi navigasinya SATU tombol Kembali ke
+     /bio: tanpa navbar situs, tanpa remah roti, tanpa tautan ke Beranda.
+     <a> biasa, bukan history.back(): berfungsi tanpa JavaScript dan tetap
+     menuju /bio walau halaman dibuka langsung dari tautan yang dibagikan.
+     Tingginya sama dengan navbar situs, sehingga offset anchor #daftar-lokasi
+     tidak berubah. --}}
+@section('header')
+    <header class="sticky top-0 z-40 border-b-2 border-brand-brown/10 bg-brand-cream-soft/95 backdrop-blur supports-[backdrop-filter]:bg-brand-cream-soft/80">
+        <div class="mx-auto flex h-header max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+            <a href="{{ route('bio.home') }}"
+               class="inline-flex min-h-11 min-w-11 items-center gap-2 rounded-pill border-2 border-brand-brown/15 bg-white px-4 text-sm font-semibold text-brand-brown shadow-sticker transition-colors hover:border-brand-brown/30">
+                <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m15 18-6-6 6-6" />
+                </svg>
+                Kembali<span class="sr-only"> ke halaman Bio {{ $brand['name'] }}</span>
+            </a>
+
+            <x-brand-mark :brand="$brand" :linked="false" loading="eager" img-class="h-8 w-auto object-contain sm:h-9" />
+        </div>
+    </header>
+@endsection
+
 @section('content')
     <section class="bg-brand-cream">
         <div class="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-20 lg:px-8">
-            <nav aria-label="Remah roti" class="mb-6 text-sm text-brand-brown/70">
-                <a href="{{ route('home') }}" class="inline-flex min-h-11 items-center rounded-pill hover:text-brand-orange">Beranda</a>
-                <span aria-hidden="true" class="px-1">/</span>
-                <span aria-current="page" class="font-semibold text-brand-brown">{{ $page['title'] }}</span>
-            </nav>
-
             <div class="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
                 <div>
                     @if ($page['period_text'])

@@ -21,6 +21,8 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
  *   - Disimpan pada disk 'public' sebagai path RELATIF, bukan URL absolut
  *     dan bukan path filesystem.
  *   - storage/app/private tidak pernah disentuh.
+ *   - Pratinjau berkas lama memakai host request yang sedang dibuka admin,
+ *     bukan APP_URL (lihat uploadedFile()).
  */
 class UploadedImage
 {
@@ -92,8 +94,58 @@ class UploadedImage
             ->getUploadedFileNameForStorageUsing(
                 static fn (TemporaryUploadedFile $file): string => self::safeFileName($file),
             )
+            ->getUploadedFileUsing(
+                static fn (FileUpload $component, string $file, string|array|null $storedFileNames): ?array => self::uploadedFile($component, $file, $storedFileNames),
+            )
             ->openable()
             ->downloadable(false);
+    }
+
+    /**
+     * Data satu berkas tersimpan untuk pratinjau FilePond di halaman Edit.
+     *
+     * Bawaan Filament memakai Storage::url(), yang untuk disk 'public'
+     * menempelkan APP_URL. FilePond lalu mengunduh berkas itu dengan fetch();
+     * bila admin membuka panel lewat host lain -- dimdum_website.test,
+     * 127.0.0.1, domain produksi -- request itu ditolak (host tak terjangkau
+     * atau diblokir CORS), load() FilePond tidak pernah dipanggil, dan field
+     * berputar selamanya. Karena itu hanya URL-nya yang diganti; ukuran, tipe,
+     * nama, dan penanganan berkas hilang tetap milik Filament.
+     *
+     * @param  string|array<string, string>|null  $storedFileNames
+     * @return array{name: string, size: int, type: ?string, url: string}|null
+     */
+    public static function uploadedFile(FileUpload $component, string $file, string|array|null $storedFileNames): ?array
+    {
+        $url = self::previewUrl($file);
+
+        if ($url === null) {
+            return null;
+        }
+
+        // null bila berkas hilang dari disk: field tampil kosong, bukan macet.
+        $uploaded = $component->getUploadedFile($file, $storedFileNames);
+
+        return $uploaded === null ? null : [...$uploaded, 'url' => $url];
+    }
+
+    /**
+     * URL publik sebuah berkas terkelola, relatif terhadap host request.
+     *
+     * Mengikuti kontrak yang sama dengan situs publik (ImageMetadata):
+     * 'storage/{path}' lalu asset() yang menambahkan host yang sedang dipakai,
+     * sehingga pratinjau selalu satu origin dengan halaman admin. Hanya path
+     * di dalam direktori modul yang diberi URL; tiap segmen di-encode.
+     */
+    public static function previewUrl(?string $path): ?string
+    {
+        $path = is_string($path) ? ltrim(trim($path), '/') : '';
+
+        if (! self::isManagedPath($path)) {
+            return null;
+        }
+
+        return asset('storage/'.implode('/', array_map(rawurlencode(...), explode('/', $path))));
     }
 
     public static function hero(): FileUpload

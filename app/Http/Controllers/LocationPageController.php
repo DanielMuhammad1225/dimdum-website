@@ -60,7 +60,12 @@ class LocationPageController extends Controller
 
         return view('location-pages.show', [
             'brand' => $brand,
-            'nav' => config('homepage.nav'),
+            /*
+             | Halaman ini dibuka dari Bio. Navigasinya satu tombol Kembali ke
+             | /bio yang dicetak view-nya sendiri, jadi menu situs -- termasuk
+             | Beranda di footer -- sengaja tidak dikirim.
+             */
+            'nav' => [],
             'page' => $payload,
             'canonical' => $canonical,
             'structuredData' => $structuredData->forPage($payload, $brand, $canonical),

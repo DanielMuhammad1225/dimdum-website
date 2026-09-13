@@ -47,7 +47,13 @@
         Lompat ke konten utama
     </a>
 
-    <x-public-header :brand="$brand" :nav="$nav" />
+    {{-- Halaman boleh membawa header sendiri. Saat ini hanya halaman slug
+         lokasi yang memakainya; halaman lain tetap memakai navbar situs. --}}
+    @hasSection('header')
+        @yield('header')
+    @else
+        <x-public-header :brand="$brand" :nav="$nav" />
+    @endif
 
     <main id="konten-utama">
         @yield('content')

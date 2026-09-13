@@ -21,8 +21,10 @@ use Filament\Facades\Filament;
 use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
 use Livewire\Mechanisms\HandleRequests\HandleRequests;
@@ -180,10 +182,13 @@ class AdminLivewireSessionTest extends TestCase
      * Kirim satu request update Livewire yang sebenarnya, lengkap dengan
      * cookie dan token CSRF, ke URI update yang benar-benar terdaftar.
      *
+     * $origin kosong berarti host bawaan aplikasi; isi dengan host lain untuk
+     * meniru panel yang dibuka lewat host berbeda dari APP_URL.
+     *
      * @param  array<string, mixed>  $updates
      * @param  array<int, array<string, mixed>>  $calls
      */
-    protected function livewireUpdate(string $pageHtml, string $component, array $updates, array $calls): TestResponse
+    protected function livewireUpdate(string $pageHtml, string $component, array $updates, array $calls, string $origin = ''): TestResponse
     {
         $snapshot = static::snapshotFrom($pageHtml, $component);
 
@@ -200,7 +205,7 @@ class AdminLivewireSessionTest extends TestCase
 
         $response = $this->withCookies($this->cookieJar)->call(
             'POST',
-            $this->updateUri(),
+            $origin.$this->updateUri(),
             [],
             $this->prepareCookiesForRequest(),
             [],
@@ -573,6 +578,56 @@ class AdminLivewireSessionTest extends TestCase
         $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menyimpan produk.');
         $this->assertSame('Nama Baru', $product->fresh()->name);
         $this->assertStillSignedIn('Setelah update produk');
+    }
+
+    /**
+     * Membuka Edit produk berfoto lewat host yang BERBEDA dari URL disk --
+     * kondisi development: APP_URL localhost:8000, panel dibuka lewat
+     * dimdum_website.test. FilePond harus menerima URL foto satu origin
+     * dengan halaman, dan memuat serta menyimpan tidak boleh mengganti
+     * session.
+     */
+    public function test_editing_a_product_image_from_another_host_keeps_session_and_origin(): void
+    {
+        Storage::fake('public', ['url' => 'http://app-url.test:8000/storage']);
+
+        $path = Storage::disk('public')->putFileAs(
+            'products',
+            UploadedFile::fake()->image('foto.jpg', 300, 300),
+            '01TESTFOTOPRODUK.jpg',
+        );
+
+        $this->logIn($this->superAdmin());
+
+        $product = Product::factory()->create(['name' => 'Berfoto', 'image_path' => $path]);
+
+        $origin = 'http://dimdum-admin.test';
+
+        $page = $this->browserGet("{$origin}/admin/produk/{$product->getKey()}/edit");
+        $page->assertOk();
+
+        $before = $this->sessionId();
+
+        // 1. Panggilan yang dipakai FilePond untuk memuat foto lama.
+        $files = $this->livewireUpdate($page->getContent(), 'EditProduct', [], [
+            ['path' => '', 'method' => 'callSchemaComponentMethod', 'params' => ['form.image_path', 'getUploadedFiles']],
+        ], $origin)->assertOk()->json('components.0.effects.returns.0');
+
+        $urls = array_column(array_filter((array) $files), 'url');
+
+        $this->assertSame(["{$origin}/storage/{$path}"], $urls, 'URL foto tidak satu origin dengan halaman admin.');
+        $this->assertSame($before, $this->sessionId(), 'Session berganti saat memuat foto produk.');
+
+        // 2. Menyimpan tanpa mengganti foto.
+        $this->livewireUpdate($page->getContent(), 'EditProduct', [
+            'data.name' => 'Berfoto Diubah',
+        ], [['path' => '', 'method' => 'save', 'params' => []]], $origin)->assertOk();
+
+        $this->assertSame($before, $this->sessionId(), 'Session berganti setelah menyimpan produk berfoto.');
+        $this->assertSame('Berfoto Diubah', $product->fresh()->name);
+        $this->assertSame($path, $product->fresh()->image_path);
+        Storage::disk('public')->assertExists($path);
+        $this->assertStillSignedIn('Setelah menyimpan produk berfoto');
     }
 
     public function test_reordering_products_keeps_the_session(): void
