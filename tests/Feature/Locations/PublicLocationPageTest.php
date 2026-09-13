@@ -304,7 +304,9 @@ class PublicLocationPageTest extends TestCase
         $this->assertStringContainsString('Deskripsi ringkas untuk mesin pencari.', $html);
         $this->assertStringContainsString('application/ld+json', $html);
         $this->assertStringContainsString('FoodEstablishment', $html);
-        $this->assertStringContainsString('BreadcrumbList', $html);
+        $this->assertStringContainsString('ItemList', $html);
+        // Halaman tanpa remah roti tidak mengiklankan breadcrumb.
+        $this->assertStringNotContainsString('BreadcrumbList', $html);
     }
 
     public function test_the_page_has_exactly_one_h1(): void

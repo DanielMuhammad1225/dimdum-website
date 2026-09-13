@@ -78,15 +78,11 @@ class LocationPageNavigationTest extends TestCase
 
         $html = $this->get('/alamat/alamat-navigasi')->assertOk()->getContent();
 
-        // Structured data (BreadcrumbList) sengaja dipertahankan dan bukan
-        // tautan yang terlihat, jadi diperiksa terpisah dari markup halaman.
-        $this->assertSame(1, preg_match('#<script type="application/ld\+json">(.*?)</script>#s', $html, $jsonLd));
-        $this->assertStringContainsString('BreadcrumbList', $jsonLd[1]);
-        $visible = str_replace($jsonLd[0], '', $html);
-
-        $this->assertStringNotContainsString('<nav', $visible, 'Halaman slug masih memuat elemen navigasi.');
-        $this->assertStringNotContainsString('id="menu-toggle"', $visible);
-        $this->assertStringNotContainsString('Beranda', $visible);
+        // Tidak ada breadcrumb Beranda di HTML maupun di JSON-LD.
+        $this->assertStringNotContainsString('<nav', $html, 'Halaman slug masih memuat elemen navigasi.');
+        $this->assertStringNotContainsString('id="menu-toggle"', $html);
+        $this->assertStringNotContainsString('Beranda', $html);
+        $this->assertStringNotContainsString('BreadcrumbList', $html);
 
         $hrefs = self::anchorHrefs($html);
         $this->assertNotContains(route('home'), $hrefs, 'Masih ada tautan ke Beranda.');
@@ -148,12 +144,25 @@ class LocationPageNavigationTest extends TestCase
         $this->assertStringContainsString('Pesan Sekarang', $html);
         $this->assertStringContainsString('Gerobak Navigasi', $html);
 
-        // Metadata, canonical, dan structured data.
+        // Metadata dan canonical.
         $canonical = route('location-pages.show', 'alamat-navigasi');
         $this->assertStringContainsString('<link rel="canonical" href="'.$canonical.'">', $html);
         $this->assertStringContainsString('<meta property="og:url" content="'.$canonical.'">', $html);
-        $this->assertStringContainsString('<script type="application/ld+json">', $html);
         $this->assertStringNotContainsString('noindex', $html);
+
+        // Structured data: JSON valid, ItemList berisi gerobak tetap ada,
+        // BreadcrumbList tidak ada lagi.
+        $this->assertSame(1, preg_match_all('#<script type="application/ld\+json">(.*?)</script>#s', $html, $scripts));
+        $data = json_decode($scripts[1][0], true, flags: JSON_THROW_ON_ERROR);
+
+        $this->assertSame('https://schema.org', $data['@context']);
+        $this->assertSame(['ItemList'], array_column($data['@graph'], '@type'));
+
+        $list = $data['@graph'][0];
+        $this->assertSame($canonical, $list['url']);
+        $this->assertSame(1, $list['numberOfItems']);
+        $this->assertSame('FoodEstablishment', $list['itemListElement'][0]['item']['@type']);
+        $this->assertStringContainsString('Gerobak Navigasi', $list['itemListElement'][0]['item']['name']);
 
         $this->assertSame(1, substr_count($html, '<h1'));
     }

@@ -148,6 +148,23 @@ class UploadedImage
         return asset('storage/'.implode('/', array_map(rawurlencode(...), explode('/', $path))));
     }
 
+    /**
+     * Seperti previewUrl(), tetapi null bila berkasnya tidak ada di disk.
+     *
+     * Untuk thumbnail tabel admin: berkas yang hilang harus menjadi sel
+     * kosong, bukan <img> yang rusak.
+     */
+    public static function existingPreviewUrl(?string $path): ?string
+    {
+        $url = self::previewUrl($path);
+
+        if ($url === null) {
+            return null;
+        }
+
+        return Storage::disk(self::DISK)->exists(ltrim(trim((string) $path), '/')) ? $url : null;
+    }
+
     public static function hero(): FileUpload
     {
         return self::make('image.path', self::HERO_DIRECTORY)

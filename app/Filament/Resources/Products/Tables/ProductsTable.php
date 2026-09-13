@@ -60,11 +60,18 @@ class ProductsTable
             ->columns([
                 ImageColumn::make('image_path')
                     ->label('Foto')
-                    ->disk('public')
+                    /*
+                     | URL dari host request, bukan Storage::url() yang memakai
+                     | APP_URL -- sama dengan pratinjau di form Edit. Berkas yang
+                     | hilang menjadi null, sehingga sel tampil kosong, bukan
+                     | <img src=""> yang rusak.
+                     */
+                    ->state(fn (Product $record): ?string => UploadedImage::existingPreviewUrl($record->image_path))
                     ->square()
                     // Produk tanpa foto menampilkan emoji-nya, bukan kotak
                     // gambar rusak.
                     ->defaultImageUrl(null)
+                    ->placeholder('—')
                     ->toggleable(),
 
                 TextColumn::make('name')

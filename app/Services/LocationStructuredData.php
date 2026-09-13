@@ -34,9 +34,10 @@ class LocationStructuredData
     /**
      * Halaman Slug Lokasi: daftar gerobak sebagai FoodEstablishment.
      *
-     * Breadcrumb hanya dua tingkat -- beranda lalu halaman ini. Provinsi,
-     * Kota/Grup, dan Area TIDAK muncul karena tak satu pun punya URL sendiri;
-     * mencantumkannya tanpa tautan hanya akan membingungkan mesin pencari.
+     * TIDAK ada BreadcrumbList. Halaman ini dibuka dari Bio dan navigasinya
+     * hanya tombol Kembali ke /bio -- tanpa remah roti dan tanpa tautan ke
+     * Beranda -- sehingga breadcrumb di structured data tidak lagi sesuai
+     * dengan yang terlihat pengunjung.
      *
      * @param  array<string, mixed>  $page
      * @param  array<string, mixed>  $brand
@@ -67,13 +68,7 @@ class LocationStructuredData
             $list['itemListElement'] = $items;
         }
 
-        return $this->graph([
-            $this->breadcrumbs([
-                ['Beranda', route('home')],
-                [$page['title'], $canonical],
-            ]),
-            $list,
-        ]);
+        return $this->graph([$list]);
     }
 
     /**
@@ -85,30 +80,6 @@ class LocationStructuredData
         return [
             '@context' => 'https://schema.org',
             '@graph' => array_values($nodes),
-        ];
-    }
-
-    /**
-     * @param  list<array{0: string, 1: string}>  $trail
-     * @return array<string, mixed>
-     */
-    protected function breadcrumbs(array $trail): array
-    {
-        $items = [];
-        $position = 1;
-
-        foreach ($trail as [$name, $url]) {
-            $items[] = [
-                '@type' => 'ListItem',
-                'position' => $position++,
-                'name' => $name,
-                'item' => $url,
-            ];
-        }
-
-        return [
-            '@type' => 'BreadcrumbList',
-            'itemListElement' => $items,
         ];
     }
 
