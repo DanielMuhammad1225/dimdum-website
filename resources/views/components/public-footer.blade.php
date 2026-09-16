@@ -12,18 +12,21 @@
                 <p class="mt-2 text-sm leading-relaxed text-brand-brown/75">{{ $brand['positioning'] }}</p>
             </div>
 
-            <nav aria-label="Navigasi footer">
-                <h2 class="font-display text-sm font-bold uppercase tracking-[0.14em] text-brand-brown/60">Jelajahi</h2>
-                <ul class="mt-2">
-                    @foreach ($nav as $item)
-                        <li>
-                            <a href="{{ $item['href'] }}" class="inline-flex min-h-11 items-center rounded-pill text-sm font-medium text-brand-brown/80 hover:text-brand-orange">
-                                {{ $item['label'] }}
-                            </a>
-                        </li>
-                    @endforeach
-                </ul>
-            </nav>
+            {{-- Halaman tanpa navigasi situs (slug lokasi) mengirim nav kosong. --}}
+            @if (! empty($nav))
+                <nav aria-label="Navigasi footer">
+                    <h2 class="font-display text-sm font-bold uppercase tracking-[0.14em] text-brand-brown/60">Jelajahi</h2>
+                    <ul class="mt-2">
+                        @foreach ($nav as $item)
+                            <li>
+                                <a href="{{ $item['href'] }}" class="inline-flex min-h-11 items-center rounded-pill text-sm font-medium text-brand-brown/80 hover:text-brand-orange">
+                                    {{ $item['label'] }}
+                                </a>
+                            </li>
+                        @endforeach
+                    </ul>
+                </nav>
+            @endif
 
             <div>
                 <h2 class="font-display text-sm font-bold uppercase tracking-[0.14em] text-brand-brown/60">Hubungi</h2>

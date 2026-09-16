@@ -40,17 +40,52 @@ enum UserRole: string
             self::SuperAdmin => PanelPermission::cases(),
 
             // manage_users sengaja BELUM diberikan ke Admin sampai aturan
-            // User Management dibuat pada fase berikutnya.
+            // User Management dibuat pada fase berikutnya. Seluruh permission
+            // modul lokasi -- master hierarki DAN halaman slug -- diberikan
+            // penuh: Admin memang pemilik halaman publik.
             self::Admin => [
                 PanelPermission::AccessAdminPanel,
                 PanelPermission::ManageSiteSettings,
                 PanelPermission::ManageHomepage,
+                ...PanelPermission::locationCases(),
+                ...PanelPermission::locationPageCases(),
+                ...PanelPermission::productCases(),
+                ...PanelPermission::bioCases(),
             ],
 
-            // Operator belum punya permission konten karena resource-nya
-            // memang belum ada.
+            /*
+             | Operator bekerja pada MASTER DATA gerobak sehari-hari: melihat,
+             | menambah, memperbarui informasi, dan mengelola foto.
+             |
+             | SENGAJA TIDAK diberikan: manage_location_areas, delete_locations,
+             | dan SELURUH permission Halaman Slug Lokasi. Halaman slug adalah
+             | wajah publik DIMDUM -- membuat, menerbitkan, menghapus, dan
+             | mengganti slug-nya tetap menjadi kewenangan Admin dan Super
+             | Admin. Operator tetap dapat mengubah data gerobak yang tampil
+             | di halaman itu, karena itu memang tugasnya.
+             |
+             | Pada modul Produk polanya sama: Operator mengurus isi katalog
+             | sehari-hari -- melihat, menambah, mengubah, dan menggantikan
+             | fotonya. Menghapus, apalagi menghapus permanen, tetap milik
+             | Admin dan Super Admin: satu produk yang hilang berarti satu
+             | kartu hilang dari homepage tanpa jejak yang bisa dipulihkan
+             | Operator sendiri.
+             |
+             | Modul Bio SENGAJA tidak diberikan sama sekali. Halaman Bio
+             | adalah tautan yang dipasang di profil social media: nomor
+             | WhatsApp, tombol, dan daftar tautannya dibuka orang dari luar
+             | situs. Mengubahnya tetap kewenangan Admin dan Super Admin.
+             */
             self::Operator => [
                 PanelPermission::AccessAdminPanel,
+                PanelPermission::ViewLocations,
+                PanelPermission::CreateLocations,
+                PanelPermission::UpdateLocations,
+                PanelPermission::ManageLocationMedia,
+                PanelPermission::ViewProducts,
+                PanelPermission::CreateProducts,
+                PanelPermission::UpdateProducts,
+                PanelPermission::ManageProductMedia,
             ],
         };
     }

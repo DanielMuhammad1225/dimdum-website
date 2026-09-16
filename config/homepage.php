@@ -78,24 +78,18 @@ return [
         'title' => 'Pilih yang Kamu Suka',
         'description' => 'Mau satu varian atau dicampur? Tinggal pilih sesuai selera dan budget kamu.',
         /*
-        | 'price_note' hanya diisi bila harganya memang sudah dipastikan.
-        | Varian tanpa harga pasti menampilkan penanda netral 'Dijual satuan'.
-        | 'image' menyusul saat foto produk resmi tersedia.
+        | 'items' dan 'has_more' SENGAJA tidak ada di config: keduanya berasal
+        | dari tabel products lewat ProductCatalogService dan ditimpa oleh
+        | HomeController. Daftar statis sebelumnya dibuang supaya tidak ada dua
+        | sumber kebenaran untuk daftar yang sama.
+        |
+        | Judul, deskripsi, catatan, dan empty state di bawah tetap milik
+        | Homepage CMS.
         */
-        'items' => [
-            ['name' => 'Dimsum Reguler', 'price_note' => 'Sekitar Rp3.000/pcs', 'image' => null],
-            ['name' => 'Ekkado', 'price_note' => null, 'image' => null],
-            ['name' => 'Sushi', 'price_note' => null, 'image' => null],
-            ['name' => 'Lumpia Kulit Tahu', 'price_note' => null, 'image' => null],
-            ['name' => 'Siew Mai Nori', 'price_note' => null, 'image' => null],
-            ['name' => 'Varian Lainnya', 'price_note' => null, 'image' => null],
-        ],
-        'fallback_price_note' => 'Dijual satuan',
         'note' => 'Ketersediaan varian bisa berbeda di setiap gerobak.',
         /*
-        | Ditampilkan hanya bila 'items' kosong. Pada fase produk dinamis,
-        | 'items' berasal dari database dan empty state inilah yang tampil
-        | selama datanya belum diisi.
+        | Ditampilkan hanya bila belum ada satu pun produk yang dipilih untuk
+        | homepage.
         */
         'empty_state' => [
             'title' => 'Daftar varian segera hadir',

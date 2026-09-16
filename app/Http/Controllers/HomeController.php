@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Services\HomepageContentService;
+use App\Services\LocationPageCatalogService;
+use App\Services\ProductCatalogService;
 use App\Services\SiteSettingsService;
 use Illuminate\Contracts\View\View;
 
@@ -26,9 +28,32 @@ class HomeController extends Controller
     public function __invoke(
         SiteSettingsService $siteSettings,
         HomepageContentService $homepageContent,
+        LocationPageCatalogService $locationCatalog,
+        ProductCatalogService $productCatalog,
     ): View {
         $brand = $siteSettings->brand();
         $homepage = $homepageContent->homepage();
+        $locationPages = $locationCatalog->visiblePagesForHomepage();
+        $products = $productCatalog->homepageProducts();
+
+        /*
+         | Ketersediaan lokasi kini ditentukan data nyata, bukan flag config.
+         | Overlay satu key ini menjaga kontrak $brand tetap sama sehingga
+         | section lain (mis. CTA penutup) ikut jujur tanpa perlu diubah.
+         */
+        $brand['locations']['available'] = $locationPages !== [];
+
+        /*
+         | Daftar produk kini berasal dari database, bukan config. Judul,
+         | deskripsi, catatan, dan empty state section ini TETAP milik Homepage
+         | CMS -- hanya 'items' dan 'has_more' yang ditimpa di sini.
+         |
+         | Overlay dipilih daripada variabel view tersendiri supaya kontrak
+         | $homepage['products'] tidak berubah bentuk, sehingga section lain
+         | tidak perlu disentuh sama sekali.
+         */
+        $homepage['products']['items'] = $products['items'];
+        $homepage['products']['has_more'] = $products['has_more'];
 
         return view('home', [
             'brand' => $brand,
@@ -36,6 +61,7 @@ class HomeController extends Controller
             'nav' => $homepage['nav'],
             'sections' => $this->resolveSections($homepage),
             'seo' => $siteSettings->seo(),
+            'locationPages' => $locationPages,
         ]);
     }
 

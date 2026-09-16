@@ -182,9 +182,10 @@ class ImageUploadTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9A-Za-z]{26}\.jpg$/', $basename);
     }
 
-    public function test_the_stored_extension_comes_from_the_detected_mime_type(): void
+    public function test_the_stored_extension_comes_from_the_real_file_content(): void
     {
-        // Nama file berbohong (.png) tetapi isinya JPEG.
+        // Berkasnya benar-benar PNG, tetapi browser melaporkannya image/jpeg
+        // dan namanya .png. Yang menentukan adalah ISI berkas.
         $file = UploadedFile::fake()->image('menipu.png', 800, 600)->mimeType('image/jpeg');
 
         Livewire::test(ManageHomepage::class)
@@ -193,9 +194,9 @@ class ImageUploadTest extends TestCase
             ->assertHasNoFormErrors();
 
         $this->assertSame(
-            'jpg',
+            'png',
             pathinfo($this->setting()->hero['image']['path'], PATHINFO_EXTENSION),
-            'Ekstensi harus mengikuti MIME hasil deteksi, bukan nama kiriman.'
+            'Ekstensi harus mengikuti isi berkas, bukan nama atau header kiriman.'
         );
     }
 

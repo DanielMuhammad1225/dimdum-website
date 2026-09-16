@@ -21,6 +21,8 @@ use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
  *   - Disimpan pada disk 'public' sebagai path RELATIF, bukan URL absolut
  *     dan bukan path filesystem.
  *   - storage/app/private tidak pernah disentuh.
+ *   - Pratinjau berkas lama memakai host request yang sedang dibuka admin,
+ *     bukan APP_URL (lihat uploadedFile()).
  */
 class UploadedImage
 {
@@ -31,6 +33,28 @@ class UploadedImage
     public const HERO_DIRECTORY = 'homepage/hero';
 
     public const OG_DIRECTORY = 'site/og';
+
+    /**
+     * Akar direktori foto gerobak. Setiap gerobak mendapat subfolder sendiri
+     * (locations/{ulid}/) supaya penghapusan tidak pernah menyentuh data
+     * gerobak lain.
+     */
+    public const LOCATION_ROOT_DIRECTORY = 'locations';
+
+    /** Poster Halaman Slug Lokasi. */
+    public const LOCATION_PAGE_DIRECTORY = 'location-pages';
+
+    /** Foto produk katalog. */
+    public const PRODUCT_DIRECTORY = 'products';
+
+    /**
+     * Foto produk dibatasi lebih ketat daripada upload lain.
+     *
+     * Kartu produk tampil enam sekaligus di homepage, jadi berkas besar
+     * langsung terasa pada halaman yang paling sering dibuka. 2 MB sudah
+     * lebih dari cukup untuk foto persegi satu produk.
+     */
+    public const PRODUCT_MAX_SIZE_KB = 2048;
 
     /**
      * MIME type yang diterima, sekaligus ekstensi resmi untuk masing-masing.
@@ -50,6 +74,9 @@ class UploadedImage
     protected const MANAGED_DIRECTORIES = [
         self::HERO_DIRECTORY,
         self::OG_DIRECTORY,
+        self::LOCATION_ROOT_DIRECTORY,
+        self::LOCATION_PAGE_DIRECTORY,
+        self::PRODUCT_DIRECTORY,
     ];
 
     public static function make(string $name, string $directory): FileUpload
@@ -67,8 +94,75 @@ class UploadedImage
             ->getUploadedFileNameForStorageUsing(
                 static fn (TemporaryUploadedFile $file): string => self::safeFileName($file),
             )
+            ->getUploadedFileUsing(
+                static fn (FileUpload $component, string $file, string|array|null $storedFileNames): ?array => self::uploadedFile($component, $file, $storedFileNames),
+            )
             ->openable()
             ->downloadable(false);
+    }
+
+    /**
+     * Data satu berkas tersimpan untuk pratinjau FilePond di halaman Edit.
+     *
+     * Bawaan Filament memakai Storage::url(), yang untuk disk 'public'
+     * menempelkan APP_URL. FilePond lalu mengunduh berkas itu dengan fetch();
+     * bila admin membuka panel lewat host lain -- dimdum_website.test,
+     * 127.0.0.1, domain produksi -- request itu ditolak (host tak terjangkau
+     * atau diblokir CORS), load() FilePond tidak pernah dipanggil, dan field
+     * berputar selamanya. Karena itu hanya URL-nya yang diganti; ukuran, tipe,
+     * nama, dan penanganan berkas hilang tetap milik Filament.
+     *
+     * @param  string|array<string, string>|null  $storedFileNames
+     * @return array{name: string, size: int, type: ?string, url: string}|null
+     */
+    public static function uploadedFile(FileUpload $component, string $file, string|array|null $storedFileNames): ?array
+    {
+        $url = self::previewUrl($file);
+
+        if ($url === null) {
+            return null;
+        }
+
+        // null bila berkas hilang dari disk: field tampil kosong, bukan macet.
+        $uploaded = $component->getUploadedFile($file, $storedFileNames);
+
+        return $uploaded === null ? null : [...$uploaded, 'url' => $url];
+    }
+
+    /**
+     * URL publik sebuah berkas terkelola, relatif terhadap host request.
+     *
+     * Mengikuti kontrak yang sama dengan situs publik (ImageMetadata):
+     * 'storage/{path}' lalu asset() yang menambahkan host yang sedang dipakai,
+     * sehingga pratinjau selalu satu origin dengan halaman admin. Hanya path
+     * di dalam direktori modul yang diberi URL; tiap segmen di-encode.
+     */
+    public static function previewUrl(?string $path): ?string
+    {
+        $path = is_string($path) ? ltrim(trim($path), '/') : '';
+
+        if (! self::isManagedPath($path)) {
+            return null;
+        }
+
+        return asset('storage/'.implode('/', array_map(rawurlencode(...), explode('/', $path))));
+    }
+
+    /**
+     * Seperti previewUrl(), tetapi null bila berkasnya tidak ada di disk.
+     *
+     * Untuk thumbnail tabel admin: berkas yang hilang harus menjadi sel
+     * kosong, bukan <img> yang rusak.
+     */
+    public static function existingPreviewUrl(?string $path): ?string
+    {
+        $url = self::previewUrl($path);
+
+        if ($url === null) {
+            return null;
+        }
+
+        return Storage::disk(self::DISK)->exists(ltrim(trim((string) $path), '/')) ? $url : null;
     }
 
     public static function hero(): FileUpload
@@ -90,6 +184,69 @@ class UploadedImage
     }
 
     /**
+     * Poster Halaman Slug Lokasi.
+     *
+     * Aturannya sama dengan upload lain: allowlist MIME tanpa SVG, maksimal
+     * 3 MB, nama file acak, dan tipe ditentukan dari isi berkas.
+     */
+    public static function locationPagePoster(string $name = 'poster_path'): FileUpload
+    {
+        return self::make($name, self::LOCATION_PAGE_DIRECTORY)
+            ->label('Poster halaman')
+            ->helperText('JPG, PNG, atau WebP. Maksimal 3 MB. Tampil sebagai gambar utama halaman dan pratinjau saat dibagikan.')
+            ->imageEditor()
+            ->imageEditorAspectRatios([null, '4:5', '1:1', '16:9']);
+    }
+
+    /**
+     * Foto satu produk katalog.
+     *
+     * Aturannya sama dengan upload lain -- allowlist MIME tanpa SVG, nama
+     * file acak, tipe ditentukan dari ISI berkas -- dengan batas ukuran yang
+     * lebih kecil.
+     */
+    public static function product(string $name = 'image_path'): FileUpload
+    {
+        return self::make($name, self::PRODUCT_DIRECTORY)
+            ->label('Foto produk')
+            ->helperText('Opsional. JPG, PNG, atau WebP. Maksimal 2 MB. Bila kosong, emoji di bawah yang tampil.')
+            ->maxSize(self::PRODUCT_MAX_SIZE_KB)
+            ->imageEditor()
+            // Kartu produk berbentuk persegi; rasio lain akan terpotong.
+            ->imageEditorAspectRatios(['1:1'])
+            ->imagePreviewHeight('120');
+    }
+
+    /**
+     * Komponen upload untuk galeri satu gerobak.
+     *
+     * Direktori per gerobak dibuat dari ULID, bukan dari nama atau slug yang
+     * bisa diubah admin, sehingga path tidak pernah berpindah.
+     */
+    public static function locationGallery(string $name, string $directory): FileUpload
+    {
+        return self::make($name, $directory)
+            ->label('Foto gerobak')
+            ->helperText('JPG, PNG, atau WebP. Maksimal 3 MB per foto.')
+            // TIDAK memakai imageEditor: foto gerobak jangan dipotong.
+            ->imagePreviewHeight('120');
+    }
+
+    /**
+     * Direktori penyimpanan foto untuk satu gerobak.
+     */
+    public static function locationDirectory(string $token): string
+    {
+        $token = preg_replace('/[^A-Za-z0-9]/', '', $token) ?? '';
+
+        if ($token === '') {
+            $token = (string) Str::ulid();
+        }
+
+        return self::LOCATION_ROOT_DIRECTORY.'/'.$token;
+    }
+
+    /**
      * Nama file akhir: ULID + ekstensi dari MIME hasil deteksi server.
      *
      * Bila MIME-nya di luar allowlist, ekstensi 'bin' dipakai supaya file
@@ -98,9 +255,37 @@ class UploadedImage
      */
     public static function safeFileName(TemporaryUploadedFile $file): string
     {
-        $mime = strtolower((string) $file->getMimeType());
+        return Str::ulid().'.'.self::extensionFor($file);
+    }
 
-        return Str::ulid().'.'.(self::EXTENSION_BY_MIME[$mime] ?? 'bin');
+    /**
+     * Ekstensi yang benar-benar cocok dengan ISI berkas.
+     *
+     * getimagesize() membaca byte header, sehingga tipe yang dilaporkan
+     * browser tidak menentukan apa pun. Ini penting agar ekstensi file dan
+     * kolom mime_type tidak pernah saling bertentangan: berkas PNG yang
+     * dikirim dengan header "image/jpeg" tetap tersimpan sebagai .png.
+     *
+     * MIME kiriman hanya dipakai bila isi berkas tidak terbaca sama sekali,
+     * dan bila keduanya gagal ekstensinya menjadi 'bin' -- tidak dapat
+     * dieksekusi maupun dirender sebagai gambar.
+     */
+    protected static function extensionFor(TemporaryUploadedFile $file): string
+    {
+        $path = $file->getRealPath();
+
+        if (is_string($path) && $path !== '') {
+            $size = @getimagesize($path);
+            $detected = is_array($size) ? strtolower((string) ($size['mime'] ?? '')) : '';
+
+            if (isset(self::EXTENSION_BY_MIME[$detected])) {
+                return self::EXTENSION_BY_MIME[$detected];
+            }
+        }
+
+        $reported = strtolower((string) $file->getMimeType());
+
+        return self::EXTENSION_BY_MIME[$reported] ?? 'bin';
     }
 
     /**
@@ -129,6 +314,50 @@ class UploadedImage
         if ($disk->exists($previousPath)) {
             $disk->delete($previousPath);
         }
+    }
+
+    /**
+     * Hapus satu file terkelola. Path di luar direktori modul diabaikan
+     * diam-diam, sehingga aset brand di public/images/brand -- yang bahkan
+     * tidak berada di disk ini -- tidak mungkin ikut terhapus.
+     */
+    public static function deleteManagedFile(?string $path): bool
+    {
+        $path = is_string($path) ? trim($path) : '';
+
+        if ($path === '' || ! self::isManagedPath($path)) {
+            return false;
+        }
+
+        $disk = Storage::disk(self::DISK);
+
+        if (! $disk->exists($path)) {
+            return false;
+        }
+
+        return $disk->delete($path);
+    }
+
+    /**
+     * Hapus seluruh direktori milik satu gerobak. Dipakai hanya saat force
+     * delete, dan hanya untuk direktori di bawah locations/.
+     */
+    public static function deleteManagedDirectory(?string $directory): bool
+    {
+        $directory = is_string($directory) ? trim(ltrim($directory, '/')) : '';
+
+        if ($directory === '' || str_contains($directory, '..')) {
+            return false;
+        }
+
+        // Wajib berupa subfolder gerobak, bukan akar locations/ itu sendiri.
+        if (! str_starts_with($directory, self::LOCATION_ROOT_DIRECTORY.'/')) {
+            return false;
+        }
+
+        $disk = Storage::disk(self::DISK);
+
+        return $disk->directoryExists($directory) && $disk->deleteDirectory($directory);
     }
 
     public static function isManagedPath(string $path): bool

@@ -72,12 +72,29 @@ class AdminPanelProvider extends PanelProvider
             )
 
             /*
-             | Locale panel di-set lewat middleware (API resmi Filament untuk
-             | menyisipkan middleware per panel). isPersistent: true supaya
-             | request update Livewire ikut memakai locale yang sama.
+             | Hanya locale yang perlu persistent, supaya teks Filament pada
+             | response Livewire tetap berbahasa Indonesia. Middleware ini
+             | tidak menyentuh cookie maupun session, jadi aman dijalankan
+             | dua kali dalam satu request.
              */
             ->middleware([
                 SetAdminPanelLocale::class,
+            ], isPersistent: true)
+
+            /*
+             | Stack bawaan Filament. TIDAK boleh ditandai persistent.
+             |
+             | Middleware persistent dijalankan ULANG oleh Livewire di tengah
+             | request /livewire/update, lewat pipeline terpisah atas duplikat
+             | request yang cookie-nya SUDAH didekripsi oleh grup `web`.
+             | EncryptCookies kedua gagal mendekripsi nilai yang sudah polos,
+             | membuang cookie session, lalu StartSession kedua menerima id
+             | null dan MEMBUAT SESSION BARU yang kosong. Akibatnya setiap
+             | interaksi Livewire (create, update, batal, toggle) menukar
+             | session pengguna dengan session anonim, dan request berikutnya
+             | dilempar ke halaman login.
+             */
+            ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,
                 StartSession::class,
@@ -87,7 +104,7 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-            ], isPersistent: true)
+            ])
             ->authMiddleware([
                 Authenticate::class,
             ]);
